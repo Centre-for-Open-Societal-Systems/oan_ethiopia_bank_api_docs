@@ -54,15 +54,15 @@ sequenceDiagram
     Partner->>Registry: 5. POST /consent/fayda/verify_otp
     Registry-->>Partner: OTP verified
 
-    Partner->>Registry: 6. POST /api/consent/attachment/upload
-    Registry-->>Partner: attachment_id
+    Partner->>Registry: 6. POST /api/consent/reasons
+    Registry-->>Partner: consent_reason_id
 
-    Partner->>Registry: 7. POST /api/consent/request/create
-    Registry-->>Partner: consent_id (pending)
+    Partner->>Registry: 7. POST /api/consent/allowed_data_fields
+    Registry-->>Partner: allowed_data_field_ids
 
-    Partner->>Registry: 8. POST /api/consent/request/approve
+    Partner->>Registry: 8. POST /api/consent/submit_consent
     Registry->>RespBucket: WebSub farmer payload
-    Registry-->>Partner: status approved
+    Registry-->>Partner: consent_id (approved)
 
     Partner->>RespBucket: 9. Read latest respone/*.json
     RespBucket-->>Partner: farmer + selected_data
@@ -72,15 +72,15 @@ sequenceDiagram
 
 | Step | Request | Notes |
 |------|---------|-------|
-| 1 | `1. login` | Saves session cookie automatically |
+| 1 | `1. login` | Saves session cookie & partner_id automatically |
 | 2 | `2. search farmer` | Sets `farmer_db_id` from search results |
 | 3 | `3. request otp` | Sets `transaction_id` collection variable |
 | 4 | `A. list OTP webhooks (S3)` | Lists files under `otp/` |
 | 5 | `B. fetch latest OTP webhook` | Sets `otp_code` from webhook JSON |
 | 6 | `4. verify otp` | Uses `transaction_id` + `otp_code` |
-| 7 | `upload attachment` | Sets `attachment_id` for create consent |
-| 8 | `5. create consent` | Sets `consent_id` collection variable |
-| 9 | `6. approve` | Publishes farmer data webhook |
+| 7 | `5. Fetch Consent Reasons` | Sets `consent_reason_id` |
+| 8 | `6. Fetch Allowed Data Fields` | Sets `allowed_data_field_ids` |
+| 9 | `7. Submit Consent` | Creates and auto-approves consent |
 | 10 | `C. list farmer webhooks (S3)` | Finds newest file under `respone/` |
 | 11 | `D. fetch latest farmer webhook` | Returns farmer details payload |
 
@@ -250,109 +250,106 @@ The OTP itself is **not** returned in this response. It is written to the `otp/`
 
 OTP codes expire quickly. Always use the value from the latest `otp/` webhook file that matches the `transaction_id` returned by request OTP.
 
-### Upload attachment
+### Fetch Consent Reasons
 
-**POST** `/api/consent/attachment/upload`
+**POST** `/api/consent/reasons`
 
-Upload a PDF (or other supported document) as base64 before creating the consent request.
-
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `attachment_base64` | Yes | Base64-encoded file content |
-| `attachment_filename` | Yes | Original filename (e.g. `test.pdf`) |
+Retrieve active reasons configured in the registry.
 
 **Example:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "call",
+  "params": {}
+}
+```
 
+**Success `data`:**
+```json
+[
+  {
+    "id": 1,
+    "name": "crop loan",
+    "description": "desc for crop loan"
+  }
+]
+```
+
+### Fetch Allowed Data Fields
+
+**POST** `/api/consent/allowed_data_fields`
+
+Retrieve allowed data fields for a consent partner.
+
+**Example:**
 ```json
 {
   "jsonrpc": "2.0",
   "method": "call",
   "params": {
-    "attachment_base64": "<base64-encoded-pdf>",
-    "attachment_filename": "test.pdf"
+    "partner_id": 16
   }
 }
 ```
 
 **Success `data`:**
-
 ```json
-{
-  "attachment_id": 566,
-  "attachment_name": "test.pdf"
-}
+[
+  {
+    "id": 1,
+    "name": "farmer_basic",
+    "code": "farmer_basic"
+  }
+]
 ```
 
-### Create consent
+### Submit Consent
 
-**POST** `/api/consent/request/create`
+**POST** `/api/consent/submit_consent`
+
+Submit consent request with dynamic OTP validation and attachment upload, triggering immediate auto-approval.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `partner_id` | Yes | Consent parent partner record ID (e.g. `16` for user `a2capp@test.com`) |
-| `farmer_db_id` | Yes* | Registry `res.partner` ID of the approved farmer |
+| `farmer_id` | Yes | Registry `res.partner` ID of the approved farmer |
 | `consent_type` | No | Default `specific` |
-| `purpose` | No | Free-text purpose |
-| `validity_from` / `validity_to` | No | Datetime strings `YYYY-MM-DD HH:MM:SS` |
-| `allowed_data_field_ids` | Yes | Array of data-field IDs allowed for this partner |
-| `originated_from` | No | e.g. `partner` |
-| `attachment_ids` | No | Attachment ID from upload step |
-
-\*Alternatively: `farmer_id` or `national_id`.
+| `consent_reason_id` | Yes | ID of the consent reason |
+| `validity_months` | No | Default `12` |
+| `allowed_data_field_ids` | Yes | Array of data-field IDs (e.g. `[1]`) |
+| `attachment_base64` | Yes | Base64 encoded consent form PDF |
+| `attachment_filename` | Yes | Consent filename |
+| `fayda_otp_transaction_id` | Yes | Validated OTP transaction ID |
 
 **Example:**
-
 ```json
 {
   "jsonrpc": "2.0",
   "method": "call",
   "params": {
-    "partner_id": 16,
-    "farmer_db_id": 30,
+    "farmer_id": 30,
     "consent_type": "specific",
-    "purpose": "A2C data sharing for agricultural services",
-    "validity_from": "2026-05-06 00:00:00",
-    "validity_to": "2027-05-06 00:00:00",
+    "consent_reason_id": 1,
+    "validity_months": 12,
     "allowed_data_field_ids": [1],
-    "originated_from": "partner",
-    "attachment_ids": 566
+    "attachment_base64": "<base64-encoded-pdf>",
+    "attachment_filename": "consent_form_test.pdf",
+    "fayda_otp_transaction_id": "4886E1A5AD5042FDB49DFFC2EE502E5F"
   }
 }
 ```
 
 **Success `data`:**
-
 ```json
 {
-  "id": 96,
-  "consent_creation_request_id": "8e3ce997-dce5-42cc-a6a4-ae3db05b6542",
-  "status": "pending"
+  "consent_id": 96,
+  "status": "approved",
+  "auto_approved": true,
+  "auto_approval_failed": false,
+  "auto_approve_method": "otp",
+  "error_details": null
 }
 ```
-
-### Approve consent
-
-**POST** `/api/consent/request/approve`
-
-```json
-{
-  "jsonrpc": "2.0",
-  "method": "call",
-  "params": {
-    "consent_id": 96
-  }
-}
-```
-
-Alternatively use `consent_creation_request_id` instead of `consent_id`.
-
-**Prerequisites for approval:**
-
-- Partner must have an active **External** WebSub configuration with event `WEBSUB_INDIVIDUAL_UPDATED`
-- WebSub hub must deliver to the S3 `respone/` webhook URL
-- `allowed_data_field_ids` must resolve to publishable farmer data
-
-On approval the registry enqueues a WebSub publish job. The farmer payload appears in the response webhook folder shortly after.
 
 ---
 

@@ -199,59 +199,59 @@ if echo "$LAST_JSON" | grep -q '"success": false'; then
   echo "OTP verify failed (may be expired). Continuing — staging may allow consent without fresh OTP." >&2
 fi
 
-call_registry "6. upload attachment" "/api/consent/attachment/upload" "{
+call_registry "6. Fetch Reasons" "/api/consent/reasons" "{
   \"jsonrpc\": \"2.0\",
   \"method\": \"call\",
-  \"params\": {
-    \"attachment_base64\": \"${ATTACHMENT_BASE64}\",
-    \"attachment_filename\": \"test.pdf\"
-  }
+  \"params\": {}
 }"
-ATTACHMENT_ID=$(echo "$LAST_JSON" | python3 -c "
+CONSENT_REASON_ID=$(echo "$LAST_JSON" | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
-data = (d.get('result') or {}).get('data') or {}
-print(data.get('attachment_id', ''))
-" 2>/dev/null || true)
-if [[ -z "$ATTACHMENT_ID" ]]; then
-  echo "Attachment upload failed." >&2
-  exit 1
-fi
-echo "Using attachment_id=$ATTACHMENT_ID"
+data = (d.get('result') or {}).get('data') or []
+print(data[0]['id'] if isinstance(data, list) and data else 1)
+" 2>/dev/null || echo "1")
+echo "Using consent_reason_id=$CONSENT_REASON_ID"
 
-call_registry "7. create consent" "/api/consent/request/create" "{
+call_registry "7. Fetch Allowed Fields" "/api/consent/allowed_data_fields" "{
   \"jsonrpc\": \"2.0\",
   \"method\": \"call\",
   \"params\": {
-    \"partner_id\": ${PARTNER_ID},
-    \"farmer_db_id\": ${FARMER_DB_ID},
+    \"partner_id\": ${PARTNER_ID}
+  }
+}"
+ALLOWED_DATA_FIELD_IDS=$(echo "$LAST_JSON" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+data = (d.get('result') or {}).get('data') or []
+print(f'[{data[0][\"id\"]}]' if isinstance(data, list) and data else '[1]')
+" 2>/dev/null || echo "[1]")
+echo "Using allowed_data_field_ids=$ALLOWED_DATA_FIELD_IDS"
+
+call_registry "8. submit consent" "/api/consent/submit_consent" "{
+  \"jsonrpc\": \"2.0\",
+  \"method\": \"call\",
+  \"params\": {
+    \"farmer_id\": ${FARMER_DB_ID},
     \"consent_type\": \"specific\",
-    \"purpose\": \"A2C data sharing for agricultural services\",
-    \"validity_from\": \"${VALIDITY_FROM}\",
-    \"validity_to\": \"${VALIDITY_TO}\",
+    \"consent_reason_id\": ${CONSENT_REASON_ID},
+    \"validity_months\": 12,
     \"allowed_data_field_ids\": ${ALLOWED_DATA_FIELD_IDS},
-    \"originated_from\": \"partner\",
-    \"attachment_ids\": ${ATTACHMENT_ID}
+    \"attachment_base64\": \"${ATTACHMENT_BASE64}\",
+    \"attachment_filename\": \"consent_form_test.pdf\",
+    \"fayda_otp_transaction_id\": \"${TX_ID}\"
   }
 }"
 CONSENT_ID=$(echo "$LAST_JSON" | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
-print((d.get('result') or {}).get('data', {}).get('id', ''))
+data = (d.get('result') or {}).get('data') or {}
+print(data.get('consent_id') or data.get('id') or '')
 " 2>/dev/null || true)
 if [[ -z "$CONSENT_ID" ]]; then
-  echo "Create consent failed." >&2
+  echo "Submit consent failed." >&2
   exit 1
 fi
 echo "Using consent_id=$CONSENT_ID"
-
-call_registry "8. approve" "/api/consent/request/approve" "{
-  \"jsonrpc\": \"2.0\",
-  \"method\": \"call\",
-  \"params\": {
-    \"consent_id\": ${CONSENT_ID}
-  }
-}"
 
 echo ""
 echo "========== 9. fetch latest farmer webhook =========="
