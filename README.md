@@ -6,7 +6,7 @@ Documentation and tooling for **Open Agri Net (OAN)** registry bank-access APIs,
 
 | File | Description |
 |------|-------------|
-| [`consent_management_postman_registry_a2c.md`](consent_management_postman_registry_a2c_workflow.md) | Full API reference — endpoints, payloads, webhooks |
+| [`consent_management_postman_registry_a2c_workflow.md`](consent_management_postman_registry_a2c_workflow.md) | Full API reference — endpoints, payloads and webhooks |
 | [`Consent Management.postman_collection.json`](Consent%20Management.postman_collection.json) | Postman collection for the end-to-end consent flow |
 | [`test_consent_management_apis.sh`](test_consent_management_apis.sh) | Bash script that runs the same flow from the terminal |
 
@@ -34,7 +34,7 @@ An A2C partner uses these APIs to search for a farmer, verify identity via Fayda
 8. **Approve consent** — approve the request; registry publishes farmer data
 9. **Fetch farmer data** — read the approved payload from the `respone/` webhook folder
 
-See the [detailed documentation](consent_management_postman_registry_a2c_workflow.md) for request/response examples, collection variables, and troubleshooting and for a detailed workflow  look at [[workflow]]
+See the [detailed documentation](consent_management_postman_registry_a2c_workflow.md) for request/response examples and collection variables.
 
 ## Quick start — Postman
 
