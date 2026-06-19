@@ -6,7 +6,7 @@ Documentation and tooling for **Open Agri Net (OAN)** registry bank-access APIs,
 
 | File | Description |
 |------|-------------|
-| [`consent_management_postman_registry_a2c.md`](consent_management_postman_registry_a2c.md) | Full API reference — endpoints, payloads, webhooks, troubleshooting |
+| [`consent_management_postman_registry_a2c_workflow.md`](consent_management_postman_registry_a2c_workflow.md) | Full API reference — endpoints, payloads and webhooks |
 | [`Consent Management.postman_collection.json`](Consent%20Management.postman_collection.json) | Postman collection for the end-to-end consent flow |
 | [`test_consent_management_apis.sh`](test_consent_management_apis.sh) | Bash script that runs the same flow from the terminal |
 
@@ -32,7 +32,7 @@ An A2C partner uses these APIs to search for a farmer, verify identity via Fayda
 6. **Fetch Allowed Data Fields** — Fetch the allowed whitelisted fields provisioned for the patrner profile, only the whitlisted fields can be retrived from regsitry as part of consent
 7. **Submit Consent** — Submit the request to create the consent artefact, given tgis OTP drive, it will be auto approved and the requseted data will be shared to kafka, the initiatiating application needs to be susbcribe to kafka to retrieve the data.
 
-See the [detailed documentation](consent_management_postman_registry_a2c.md) for request/response examples, collection variables, and troubleshooting and for a detailed workflow  look at [[workflow]]
+See the [detailed documentation](consent_management_postman_registry_a2c_workflow.md) for request/response examples and collection variables.
 
 ## Quick start — Postman
 
