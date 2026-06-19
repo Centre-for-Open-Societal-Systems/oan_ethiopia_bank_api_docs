@@ -501,59 +501,87 @@ Following auto-approval, a WebSub event payload similar to the one below is disp
 
 ```json
 {
-  "source": "g2p_ati_consent_mgt",
-  "event_type": "WEBSUB_INDIVIDUAL_UPDATED",
-  "published_at": "2026-06-06 10:40:35",
-  "consent": {
-    "id": 95,
-    "consent_creation_request_id": "57782a91-bbd7-4764-98c7-b1b136401aec",
-    "consent_type": "specific",
-    "status": "approved",
-    "approved_at": "2026-06-06 10:40:35",
-    "validity_from": "2026-05-06 00:00:00",
-    "validity_to": "2027-05-06 00:00:00",
-    "requested_field_codes": [
-      "farmer_basic"
-    ],
-    "published_field_codes": [
-      "farmer_basic"
-    ],
-    "data_field_mode": "dynamic"
-  },
-  "consent_partner": {
-    "id": 16,
-    "name": "a2capp@test.com",
-    "ref": false,
-    "websub_config_id": 2,
-    "websub_config_name": "Local Test WebSub (Mock)1"
-  },
-  "farmer": {
-    "id": 30,
-    "farmer_id": false,
-    "name": "ABEBE BEKELE TESFAYE BEKELE TEFAYA"
-  },
-  "selected_data": {
-    "farmer": {
-      "First Name(English)": false,
-      "Father Name": false,
-      "Email": false,
-      "Region": {
-        "id": 1,
-        "name": "Addis Ababa",
-        "code": "ET14"
-      },
-      "Zone": {
-        "id": 1,
-        "name": "Gulele Subcity",
-        "code": "ET1401"
-      },
-      "Woreda": {
-        "id": 1,
-        "name": "Wereda 01",
-        "code": "140101"
-      }
-    }
-  }
+	"source": "g2p_ati_consent_mgt",
+	"event_type": "WEBSUB_INDIVIDUAL_UPDATED",
+	"published_at": "2026-06-19 12:51:04",
+	"consent": {
+		"id": 7,
+		"consent_creation_request_id": "5212714a-300e-423c-aace-b1a841f9b4be",
+		"consent_type": "specific",
+		"status": "approved",
+		"approved_at": "2026-06-19 12:51:04",
+		"validity_from": "2026-06-19 12:51:04",
+		"validity_to": "2027-06-14 12:51:04",
+		"requested_field_codes": [
+			"ati_fast_farmer_payload"
+		],
+		"published_field_codes": [
+			"ati_fast_farmer_payload"
+		],
+		"data_field_mode": "dynamic"
+	},
+	"consent_partner": {
+		"id": 264515,
+		"name": "COOP BANK",
+		"ref": false,
+		"websub_config_id": 4,
+		"websub_config_name": "COOP"
+	},
+	"farmer": {
+		"id": 612961,
+		"farmer_id": "FR-9075201458",
+		"name": "TEST TEST TEST"
+	},
+	"selected_data": {
+		"farmer": {
+			"first_name_english": "Test",
+			"fathers_name_english": "Test",
+			"grandfathers_name_english": "Test",
+			"first_name_amharic": "ሙከራ",
+			"fathers_name_amharic": "ሙከራ",
+			"grandfathers_name_amharic": "ሙከራ",
+			"gender": "male",
+			"birthdate": "1985-06-12",
+			"active": true,
+			"region": "Oromiya",
+			"region_code": "ET04",
+			"zone": "Mirab Shewa",
+			"zone_code": "ET0405",
+			"woreda": "Cheliya",
+			"woreda_code": "ET040505",
+			"kebele": "Bilof Keku",
+			"kebele_code": "40505888003",
+			"farmer_id": "FR-9075201458",
+			"national_id": [
+				"931795149087"
+			],
+			"marital_status": "married",
+			"educational_level": "read_write",
+			"house_hold_income": [
+				"Livestock Production",
+				"Others"
+			],
+			"other_farmer_in_household_with_separate_land": false,
+			"total_owned_land": 0.65,
+			"total_rented_land": 0.0,
+			"total_land_area": 0.65,
+			"total_crop_sharing_land": 0.0,
+			"farming_type": "crop_farming",
+			"primary_language": "Amharic",
+			"phone_numbers": [
+				{
+					"id": 340728,
+					"name": "+251989653278"
+				}
+			],
+			"land_information": [
+				{
+					"id": 1333913,
+					"name": "TEST TEST TEST"
+				}
+			]
+		}
+	}
 }
 ```
 
