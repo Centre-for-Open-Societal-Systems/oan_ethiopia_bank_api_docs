@@ -14,11 +14,11 @@ Documentation and tooling for **Open Agri Net (OAN)** registry bank-access APIs,
 
 | Item                 | Value                                                                                                                              |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Registry             | [https://registry.oanstaging.com](https://registry.oanstaging.com)                                                                 |
-| Odoo database        | `odoo`                                                                                                                             |
-| Test credentials     | `a2c@test.com` / `a2c@test.com`                                                                                                    |
-| OTP webhook folder   | [http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/otp/](http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/otp/)         |
-| Farmer data webhooks | [http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/respone/](http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/respone/) |
+| Registry             | [https://farmer-profile.ati.gov.et](https://farmer-profile.ati.gov.et)                                                                 |
+| Odoo database        | Please contact the administrator                                                                                                                             |
+| Test credentials     | Please contact the administartor                                                                                                    |
+| OTP webhook folder   | Given the api is hitting production and connected to fayda, the OTP will be recieved on the mobile         |
+| Farmer data webhooks | The resposne will come to kafka and need to subscribed to be delivered to the required application |
 
 ## End-to-end flow
 
@@ -27,12 +27,10 @@ An A2C partner uses these APIs to search for a farmer, verify identity via Fayda
 1. **Login** — authenticate and obtain an Odoo session cookie
 2. **Search farmer** — look up farmer by registration ID
 3. **Request OTP** — trigger Fayda OTP delivery
-4. **Fetch OTP** — read the OTP from the `otp/` webhook folder
-5. **Verify OTP** — confirm the farmer's identity
-6. **Upload attachment** — upload a PDF for the consent record
-7. **Create consent** — create a pending consent request
-8. **Approve consent** — approve the request; registry publishes farmer data
-9. **Fetch farmer data** — read the approved payload from the `respone/` webhook folder
+4. **Verify OTP** — Verify the OTO recieved from the Farmer
+5. **Fetch Consent Reasons** — Fetch the consent reasons from registry to be displayed in the UI, for initiating the consent request
+6. **Fetch Allowed Data Fields** — Fetch the allowed whitelisted fields provisioned for the patrner profile, only the whitlisted fields can be retrived from regsitry as part of consent
+7. **Submit Consent** — Submit the request to create the consent artefact, given tgis OTP drive, it will be auto approved and the requseted data will be shared to kafka, the initiatiating application needs to be susbcribe to kafka to retrieve the data.
 
 See the [detailed documentation](consent_management_postman_registry_a2c.md) for request/response examples, collection variables, and troubleshooting and for a detailed workflow  look at [[workflow]]
 
@@ -45,6 +43,8 @@ See the [detailed documentation](consent_management_postman_registry_a2c.md) for
 The collection includes test scripts that auto-save `farmer_db_id`, `consent_id`, `transaction_id`, `otp_code`, and `attachment_id` between steps.
 
 ## Quick start — terminal
+
+If you are testing this against our staging env [https://registry.oanstaging.com](https://registry.oanstaging.com) you can use the bewlo code and script files for testing
 
 ```bash
 chmod +x test_consent_management_apis.sh
