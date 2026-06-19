@@ -125,7 +125,7 @@ Postman automatically handles session cookies if the **Send cookies** option is 
 
 **POST** `/consent/search_farmer`
 
-Query a farmer's record by registration ID, national ID, or another configured identifier before initiating the consent workflow.
+Query a farmer's record by FAN ID before initiating the consent workflow.
 
 ### Expected Request Body
 
