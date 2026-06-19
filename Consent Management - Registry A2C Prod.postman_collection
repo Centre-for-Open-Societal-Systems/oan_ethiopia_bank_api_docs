@@ -1,0 +1,753 @@
+{
+  "info": {
+    "_postman_id": "53d1274f-51ad-4973-a87d-a2cd2d4ac55a",
+    "name": "Consent Management - Registry A2C Copy",
+    "description": "Consent Management APIs on OpenG2P/Odoo Registry for the A2C loan flow (Updated to ATI Farmer Consent APIs).\n\n**Base URL:** `https://registry.oanstaging.com` (database: `odoo`)\n\n**End-to-end flow**\n1. **login** — authenticate and establish session cookie\n2. **search farmer** — look up farmer by registration ID\n3. **request otp** — trigger Fayda OTP for the farmer\n4. **list OTP webhooks** / **fetch latest OTP webhook** — read OTP from `otp/` folder\n5. **verify otp** — verify Fayda OTP using `transaction_id` + `otp_code`\n6. **fetch consent reasons** — retrieve active consent reasons\n7. **fetch allowed data fields** — retrieve allowed fields for the partner\n8. **submit consent** — submit consent request, which automatically creates and auto-approves the consent request\n9. **list farmer webhooks** / **fetch latest farmer webhook** — read payload from `respone/` after approval\n\n**Webhook bucket (public S3 website)**\n- OTP callbacks: http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/otp/\n- Farmer data after approval: http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/respone/",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "49281480",
+    "_collection_link": "https://go.postman.co/collection/49281480-53d1274f-51ad-4973-a87d-a2cd2d4ac55a?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "Registry API",
+      "item": [
+        {
+          "name": "1. login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Login Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const response = pm.response.json();",
+                  "const result = response.result || {};",
+                  "if (result.partner_id) {",
+                  "    pm.collectionVariables.set(\"partner_id\", result.partner_id);",
+                  "    pm.environment.set(\"partner_id\", result.partner_id);",
+                  "    console.log(\"Partner ID saved:\", result.partner_id);",
+                  "}",
+                  "",
+                  "var cookies = pm.cookies.toObject();",
+                  "if (cookies['session_id']) {",
+                  "    pm.collectionVariables.set(\"session_id\", cookies['session_id']);",
+                  "    pm.environment.set(\"session_id\", cookies['session_id']);",
+                  "    console.log(\"Session saved:\", cookies['session_id']);",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"jsonrpc\": \"2.0\",\n    \"params\": {\n        \"db\": \"{{db}}\",\n        \"login\": \"{{login}}\",\n        \"password\": \"{{password}}\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/web/session/authenticate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "web",
+                "session",
+                "authenticate"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2. search farmer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Search Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const response = pm.response.json();",
+                  "const result = response.result || {};",
+                  "const data = result.data || {};",
+                  "const farmers = data.farmers || [];",
+                  "",
+                  "if (farmers.length > 0) {",
+                  "    const farmer = farmers[0];",
+                  "    pm.collectionVariables.set(\"farmer_db_id\", farmer.id);",
+                  "    pm.collectionVariables.set(\"farmer_name\", farmer.name || \"\");",
+                  "    pm.collectionVariables.set(\"farmer_phone\", farmer.phone || \"\");",
+                  "    pm.collectionVariables.set(\"otp_identifier\", farmer.otp_identifier || \"\");",
+                  "    pm.collectionVariables.set(\"otp_identifier_type\", farmer.otp_identifier_type || \"\");",
+                  "",
+                  "    pm.environment.set(\"farmer_db_id\", farmer.id);",
+                  "    pm.environment.set(\"farmer_name\", farmer.name || \"\");",
+                  "    pm.environment.set(\"farmer_phone\", farmer.phone || \"\");",
+                  "    pm.environment.set(\"otp_identifier\", farmer.otp_identifier || \"\");",
+                  "    pm.environment.set(\"otp_identifier_type\", farmer.otp_identifier_type || \"\");",
+                  "",
+                  "    console.log(\"Saved Farmer Details:\", {",
+                  "        id: farmer.id,",
+                  "        name: farmer.name,",
+                  "        phone: farmer.phone,",
+                  "        otp_identifier: farmer.otp_identifier",
+                  "    });",
+                  "} else {",
+                  "    console.log(\"No farmer records found in search response.\");",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"jsonrpc\": \"2.0\",\n    \"params\": {\n        \"farmer_id\": \"{{farmer_query_id}}\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/consent/search_farmer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "consent",
+                "search_farmer"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3. request otp",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Request OTP Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const response = pm.response.json();",
+                  "const result = response.result || {};",
+                  "const data = result.data || {};",
+                  "",
+                  "if (result.success && data.transaction_id) {",
+                  "    const txId = data.transaction_id;",
+                  "    pm.collectionVariables.set(\"transaction_id\", txId);",
+                  "    pm.environment.set(\"transaction_id\", txId);",
+                  "    console.log(\"Saved Transaction ID:\", txId);",
+                  "} else {",
+                  "    console.log(\"Could not extract transaction_id from OTP response.\");",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"jsonrpc\": \"2.0\",\n    \"params\": {\n        \"farmer_id\": {{farmer_db_id}}\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/consent/fayda/request_otp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "consent",
+                "fayda",
+                "request_otp"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "4. verify otp",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Verify OTP Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const response = pm.response.json();",
+                  "const result = response.result || {};",
+                  "pm.test(\"OTP verification successful\", function () {",
+                  "    pm.expect(result.success).to.eql(true);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"jsonrpc\": \"2.0\",\n    \"params\": {\n        \"transaction_id\": \"{{transaction_id}}\",\n        \"otp\": \"{{otp_code}}\",\n        \"farmer_id\": {{farmer_db_id}}\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/consent/fayda/verify_otp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "consent",
+                "fayda",
+                "verify_otp"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5. Fetch Consent Reasons",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Fetch Reasons Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const response = pm.response.json();",
+                  "const result = response.result || {};",
+                  "const data = result.data || [];",
+                  "let reasonId = 1;",
+                  "",
+                  "if (Array.isArray(data) && data.length > 0) {",
+                  "    reasonId = data[0].id;",
+                  "} else if (data.reasons && Array.isArray(data.reasons) && data.reasons.length > 0) {",
+                  "    reasonId = data.reasons[0].id;",
+                  "}",
+                  "",
+                  "pm.collectionVariables.set(\"consent_reason_id\", reasonId);",
+                  "pm.environment.set(\"consent_reason_id\", reasonId);",
+                  "console.log(\"Saved Consent Reason ID:\", reasonId);"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"jsonrpc\": \"2.0\",\n    \"params\": {}\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/consent/reasons",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "consent",
+                "reasons"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "6. Fetch Allowed Data Fields",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Fetch Allowed Fields Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const response = pm.response.json();",
+                  "const result = response.result || {};",
+                  "const data = result.data || [];",
+                  "let fieldIds = [1];",
+                  "",
+                  "if (Array.isArray(data) && data.length > 0) {",
+                  "    fieldIds = [data[0].id];",
+                  "} else if (data.allowed_data_fields && Array.isArray(data.allowed_data_fields) && data.allowed_data_fields.length > 0) {",
+                  "    fieldIds = [data.allowed_data_fields[0].id];",
+                  "}",
+                  "",
+                  "pm.collectionVariables.set(\"allowed_data_field_ids\", JSON.stringify(fieldIds));",
+                  "pm.environment.set(\"allowed_data_field_ids\", JSON.stringify(fieldIds));",
+                  "console.log(\"Saved Allowed Data Field IDs:\", fieldIds);"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"jsonrpc\": \"2.0\",\n    \"params\": {\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/consent/allowed_data_fields",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "consent",
+                "allowed_data_fields"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "7. Submit Consent",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Submit Consent Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const response = pm.response.json();",
+                  "const result = response.result || {};",
+                  "pm.test(\"Consent submission successful\", function () {",
+                  "    pm.expect(result.success).to.eql(true);",
+                  "});",
+                  "",
+                  "if (result.success && result.data) {",
+                  "    const cId = result.data.consent_id || result.data.id;",
+                  "    if (cId) {",
+                  "        pm.collectionVariables.set(\"consent_id\", cId);",
+                  "        pm.environment.set(\"consent_id\", cId);",
+                  "        console.log(\"Saved Consent ID:\", cId);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"jsonrpc\": \"2.0\",\n    \"params\": {\n        \"farmer_id\": {{farmer_db_id}},\n        \"consent_type\": \"{{consent_type}}\",\n        \"consent_reason_id\": {{consent_reason_id}},\n        \"validity_months\": {{validity_months}},\n        \"allowed_data_field_ids\": {{allowed_data_field_ids}},\n        \"attachment_base64\": \"{{attachment_base64}}\",\n        \"attachment_filename\": \"{{attachment_filename}}\",\n        \"fayda_otp_transaction_id\": \"{{transaction_id}}\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/consent/submit_consent",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "consent",
+                "submit_consent"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Webhook Helpers",
+      "item": [
+        {
+          "name": "A. list OTP webhooks (S3)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('S3 list HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const xml = pm.response.text();",
+                  "const keys = [...xml.matchAll(/<Key>([^<]+)<\\/Key>/g)].map(function (m) { return m[1]; });",
+                  "const otpKeys = keys.filter(function (k) {",
+                  "    return k.startsWith('otp/') && k.endsWith('.json');",
+                  "}).sort();",
+                  "",
+                  "if (otpKeys.length) {",
+                  "    const latest = otpKeys[otpKeys.length - 1];",
+                  "    pm.collectionVariables.set('latest_otp_webhook_key', latest);",
+                  "    console.log('Latest OTP webhook key:', latest);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{webhook_s3_api}}/?list-type=2&prefix=otp/&max-keys=50",
+              "host": [
+                "{{webhook_s3_api}}"
+              ],
+              "path": [
+                ""
+              ],
+              "query": [
+                {
+                  "key": "list-type",
+                  "value": "2"
+                },
+                {
+                  "key": "prefix",
+                  "value": "otp/"
+                },
+                {
+                  "key": "max-keys",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "List OTP callback JSON files under `otp/`. Sets `latest_otp_webhook_key` for the next request.\n\nBrowser alternative: http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/otp/"
+          },
+          "response": []
+        },
+        {
+          "name": "B. fetch latest OTP webhook",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('OTP webhook HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "let payload = {};",
+                  "try { payload = pm.response.json(); } catch (e) {}",
+                  "",
+                  "const otp = payload.otp || payload.otp_code || (payload.request && payload.request.otp);",
+                  "const tx = payload.transaction_id || payload.transactionID || payload.transactionId;",
+                  "",
+                  "if (otp) pm.collectionVariables.set('otp_code', String(otp));",
+                  "if (tx) pm.collectionVariables.set('transaction_id', String(tx));",
+                  "",
+                  "console.log('Extracted otp_code:', pm.collectionVariables.get('otp_code'));",
+                  "console.log('Extracted transaction_id:', pm.collectionVariables.get('transaction_id'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{webhook_url}}/{{latest_otp_webhook_key}}",
+              "host": [
+                "{{webhook_url}}"
+              ],
+              "path": [
+                "{{latest_otp_webhook_key}}"
+              ]
+            },
+            "description": "Fetch the newest OTP webhook JSON and populate `otp_code` / `transaction_id` collection variables when present."
+          },
+          "response": []
+        },
+        {
+          "name": "C. list farmer webhooks (S3)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('S3 list HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const xml = pm.response.text();",
+                  "const keys = [...xml.matchAll(/<Key>([^<]+)<\\/Key>/g)].map(function (m) { return m[1]; });",
+                  "const responseKeys = keys.filter(function (k) {",
+                  "    return k.startsWith('respone/') && k.endsWith('.json') && k.indexOf('webhook-respone') === -1;",
+                  "}).sort();",
+                  "",
+                  "if (responseKeys.length) {",
+                  "    const latest = responseKeys[responseKeys.length - 1];",
+                  "    pm.collectionVariables.set('latest_farmer_webhook_key', latest.replace(/^respone\\//, ''));",
+                  "    console.log('Latest farmer webhook key:', latest);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{webhook_s3_api}}/?list-type=2&prefix=respone/&max-keys=50",
+              "host": [
+                "{{webhook_s3_api}}"
+              ],
+              "path": [
+                ""
+              ],
+              "query": [
+                {
+                  "key": "list-type",
+                  "value": "2"
+                },
+                {
+                  "key": "prefix",
+                  "value": "respone/"
+                },
+                {
+                  "key": "max-keys",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "List farmer-data webhook payloads under `respone/` after consent approval.\n\nBrowser alternative: http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/respone/"
+          },
+          "response": []
+        },
+        {
+          "name": "D. fetch latest farmer webhook",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Farmer webhook HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const payload = pm.response.json();",
+                  "pm.test('Farmer webhook has consent block', function () {",
+                  "    pm.expect(payload).to.have.property('consent');",
+                  "    pm.expect(payload).to.have.property('farmer');",
+                  "    pm.expect(payload).to.have.property('selected_data');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{webhook_response_url}}/{{latest_farmer_webhook_key}}",
+              "host": [
+                "{{webhook_response_url}}"
+              ],
+              "path": [
+                "{{latest_farmer_webhook_key}}"
+              ]
+            },
+            "description": "Fetch the newest farmer-data webhook JSON published after consent approval."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://farmer-profile.ati.gov.et"
+    },
+    {
+      "key": "url",
+      "value": "https://registry.oanstaging.com"
+    },
+    {
+      "key": "db",
+      "value": "socialregistrydb"
+    },
+    {
+      "key": "login",
+      "value": "test@user.com"
+    },
+    {
+      "key": "password",
+      "value": "pass"
+    },
+    {
+      "key": "farmer_query_id",
+      "value": "1234567"
+    },
+    {
+      "key": "farmer_db_id",
+      "value": "30"
+    },
+    {
+      "key": "transaction_id",
+      "value": ""
+    },
+    {
+      "key": "otp_code",
+      "value": ""
+    },
+    {
+      "key": "consent_reason_id",
+      "value": "1"
+    },
+    {
+      "key": "consent_type",
+      "value": "specific"
+    },
+    {
+      "key": "validity_months",
+      "value": "12"
+    },
+    {
+      "key": "allowed_data_field_ids",
+      "value": "[1]"
+    },
+    {
+      "key": "partner_id",
+      "value": "16"
+    },
+    {
+      "key": "attachment_base64",
+      "value": "JVBERi0xLjMKJZOMi54gUmVwb3J0TGFiIEdlbmVyYXRlZCBQREYgZG9jdW1lbnQgKG9wZW5zb3VyY2UpCjEgMCBvYmoKPDwKL0YxIDIgMCBSIC9GMiAzIDAgUgo+PgplbmRvYmoKMiAwIG9iago8PAovQmFzZUZvbnQgL0hlbHZldGljYSAvRW5jb2RpbmcgL1dpbkFuc2lFbmNvZGluZyAvTmFtZSAvRjEgL1N1YnR5cGUgL1R5cGUxIC9UeXBlIC9Gb250Cj4+CmVuZG9iagozIDAgb2JqCjw8Ci9CYXNlRm9udCAvSGVsdmV0aWNhLUJvbGQgL0VuY29kaW5nIC9XaW5BbnNpRW5jb2RpbmcgL05hbWUgL0YyIC9TdWJ0eXBlIC9UeXBlMSAvVHlwZSAvRm9udAo+PgplbmRvYmoKNCAwIG9iago8PAovQ29udGVudHMgMTAgMCBSIC9NZWRpYUJveCBbIDAgMCA2MTIgNzkyIF0gL1BhcmVudCA5IDAgUiAvUmVzb3VyY2VzIDw8Ci9Gb250IDEgMCBSIC9Qcm9jU2V0IFsgL1BERiAvVGV4dCAvSW1hZ2VCIC9JbWFnZUMgL0ltYWdlSSBdCj4+IC9Sb3RhdGUgMCAvVHJhbnMgPDwKCj4+IAogIC9UeXBlIC9QYWdlCj4+CmVuZG9iago1IDAgb2JqCjw8Ci9Db250ZW50cyAxMSAwIFIgL01lZGlhQm94IFsgMCAwIDYxMiA3OTIgXSAvUGFyZW50IDkgMCBSIC9SZXNvdXJjZXMgPDwKL0ZvbnQgMSAwIFIgL1Byb2NTZXQgWyAvUERGIC9UZXh0IC9JbWFnZUIgL0ltYWdlQyAvSW1hZ2VJIF0KPj4gL1JvdGF0ZSAwIC9UcmFucyA8PAoKPj4gCiAgL1R5cGUgL1BhZ2UKPj4KZW5kb2JqCjYgMCBvYmoKPDwKL0NvbnRlbnRzIDEyIDAgUiAvTWVkaWFCb3ggWyAwIDAgNjEyIDc5MiBdIC9QYXJlbnQgOSAwIFIgL1Jlc291cmNlcyA8PAovRm9udCAxIDAgUiAvUHJvY1NldCBbIC9QREYgL1RleHQgL0ltYWdlQiAvSW1hZ2VDIC9JbWFnZUkgXQo+PiAvUm90YXRlIDAgL1RyYW5zIDw8Cgo+PiAKICAvVHlwZSAvUGFnZQo+PgplbmRvYmoKNyAwIG9iago8PAovUGFnZU1vZGUgL1VzZU5vbmUgL1BhZ2VzIDkgMCBSIC9UeXBlIC9DYXRhbG9nCj4+CmVuZG9iago4IDAgb2JqCjw8Ci9BdXRob3IgKGFub255bW91cykgL0NyZWF0aW9uRGF0ZSAoRDoyMDI2MDYxODA3MDMzNSswMCcwMCcpIC9DcmVhdG9yIChhbm9ueW1vdXMpIC9LZXl3b3JkcyAoKSAvTW9kRGF0ZSAoRDoyMDI2MDYxODA3MDMzNSswMCcwMCcpIC9Qcm9kdWNlciAoUmVwb3J0TGFiIFBERiBMaWJyYXJ5IC0gXChvcGVuc291cmNlXCkpIAogIC9TdWJqZWN0ICh1bnNwZWNpZmllZCkgL1RpdGxlICh1bnRpdGxlZCkgL1RyYXBwZWQgL0ZhbHNlCj4+CmVuZG9iago5IDAgb2JqCjw8Ci9Db3VudCAzIC9LaWRzIFsgNCAwIFIgNSAwIFIgNiAwIFIgXSAvVHlwZSAvUGFnZXMKPj4KZW5kb2JqCjEwIDAgb2JqCjw8Ci9GaWx0ZXIgWyAvQVNDSUk4NURlY29kZSAvRmxhdGVEZWNvZGUgXSAvTGVuZ3RoIDUwOQo+PgpzdHJlYW0KR2FzMkY5NWlRPSY7OU5KJ20iMkw1Vlo6N09sIk5gIT4+JDQxcV9uajtDZFkzN0NtaytkRCwtQk5haTxtIVhUTERqTl1dU1Y4LyQzMG4rNk1JJF9AUSZKLTchIiZUZEpqPWdGcUI0SlcuPUgpcHJVLS4jR1gyTT0pRzZaYVpkb3FIOVsrUXBxbkFEay9yNGhjcXFbRTkrcTtrPz9zLkMlQWBNc2dbbW8tQjk4PFlUUV9fbFFYXkY+PFFdIz9gKjgoJV8jaVRfMVswcStKb2UrQjVTV2BjSXQtQS07ajd1TFRcVVI5N3AscC01USdZJSklRThSKTU6PE8ncz1scm02cDJsWTM2Ki9AL2NIPSs6Y1s8R3NNaDc/R3BjQF9PZlhQclplaUBQcFNAMVI2cEg3LHRMaT4+JSoucStjTWIibnI7YDpzKFVtPTg/X211LVQzSm5FXyk8KzZFZ0JiXjgwZGwhPmUlRkE+PUgoMTJOV0hPQ1tSWDZjLjJJMHQpKEgzcyYxYiE5J0BkMjZIUGgpSlFGK2VzZC4+Z2htRl1fLVFAYmZrLTwiMyEvXW86bk9gJGAhSwFdK14vYkEoPmJNJitnPzZJM25MNVslYkU2ckYtYWskMFVHXVBeOj5gWlhGKGNwUiJvQUtnXkE7PTg5Uy5daTgldU0uYW9Efj5lbmRzdHJlYW0KZW5kb2JqCjExIDAgb2JqCjw8Ci9GaWx0ZXIgWyAvQVNDSUk4NURlY29kZSAvRmxhdGVEZWNvZGUgXSAvTGVuZ3RoIDQzMAo+PgpzdHJlYW0KR2FyblJkN09LcSY6RjQmayMldG5dPGVXaVtvTzFNJDZvNihAc1p0M1gxQDpecDxgZlBnSkVjIjkwcl1kUkAwVT9NKmI6M2NfXmRbMjZJdW5QU05JIWprLE1oNU4vOyJiQlMuRDBEPyk8UTBuXXJMXCZbSC0mLjAqNl9uZ1RxPy1FUDYwNVdRMDl0ZW9la0VFcVpHZV4xWWFcL2QkMFo0P0RSZC9CVUttVihrSEgvX29MXEIpTV5FUFosPmVUIywjXmdBK140bHNgYyZLMmApUEUtOEYvOXNHSlxhLFApNUIpMDUqXyttSkBhN1xQbS5NYEg/YGxyPy49NWhTS2k/Pzc9TXMzO0EwUERSSENrSWNKO2haPHNDU2AzaExwKlA/TiFbNT1lPGBIWTFrMkwmZlhVbmZqYGpKY11OKkgzZCltPFArQUxNLT1MYC9XK0slQ3BNNGVkPz0iXWpwOGYpQkg7QkUoQiZgSVlbZ1ktMVlnJ0wicVo2Xi0oZEJhYV1kKS1GMG4lY15qYnFhOXUyV1ZrRG9WZ1RKQzluRldRN18+T1wkWlFJP09eNUR+PmVuZHN0cmVhbQplbmRvYmoKMTIgMCBvYmoKPDwKL0ZpbHRlciBbIC9BU0NJSTg1RGVjb2RlIC9GbGF0ZURlY29kZSBdIC9MZW5ndGggMzg5Cj4+CnN0cmVhbQpHYXJvPWJ0Yy8xJjs5TSNNRS8qTlI1ZDFqY09EOUImNC4rIlMxOjNZRU4oK2Quc0ZAR1tqT2BUVW50SU5DVU1VNzJldSVob3A1ITkoO1AnRU1gVjRfLCRAL1xUb19DcDJYLlhKbjdaMXMvO0BTXSFbSXNHOSZSX0JLdXBdNTZiMi5fQTJDbS5dWDFBSF9NZ1VIZT8iSWNaTkRIcDhCdVo9YTcxMEQqMDNQREshK1lhKSk1UTBsS1YrKDttLiRQTEZyNCYwUGMoN2AmTVs2PE5cX1VlVUVCLi9XKXNLZFBjaUhSQVVMTUNMbVotS2dzTzUtIkVjJ2pdbVlrNShWTWI0SV5PZj5eP2pncGtyZDFkYTs2TzEuRiokLiVpMzFbYFwsZmkjKiFBaylGLSVSNV5GU0wuPGBjIlNaZUowbStFK3Jfc1xPNHVlcltNPzVNSSpOJGNfbyg/Q10nV1EvYydDTGtPVXQ7Jl9dJSRgWjFodFA8Z05LMCpoK1dMWTJrMUpfIlR+PmVuZHN0cmVhbQplbmRvYmoKeHJlZgowIDEzCjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDA2MSAwMDAwMCBuIAowMDAwMDAwMTAyIDAwMDAwIG4gCjAwMDAwMDAyMDkgMDAwMDAgbiAKMDAwMDAwMDMyMSAwMDAwMCBuIAowMDAwMDAwNTE1IDAwMDAwIG4gCjAwMDAwMDA3MDkgMDAwMDAgbiAKMDAwMDAwMDkwMyAwMDAwMCBuIAowMDAwMDAwOTcxIDAwMDAwIG4gCjAwMDAwMDEyMzIgMDAwMDAgbiAKMDAwMDAwMTMwMyAwMDAwMCBuIAowMDAwMDAxOTAzIDAwMDAwIG4gCjAwMDAwMDI0MjQgMDAwMDAgbiAKdHJhaWxlcgo8PAovSUQgCls8MTEwZGE4Y2QwMGM0OWJkNzkwNmQwYTcwMDYxNWNmZjE+PDExMGRhOGNkMDBjNDliZDc5MDZkMGE3MDA2MTVjZmYxPl0KJSBSZXBvcnRMYWIgZ2VuZXJhdGVkIFBERiBkb2N1bWVudCAtLSBkaWdlc3QgKG9wZW5zb3VyY2UpCgovSW5mbyA4IDAgUgovUm9vdCA3IDAgUgovU2l6ZSAxMwo+PgpzdGFydHhyZWYKMjkwNAolJUVPRgo="
+    },
+    {
+      "key": "attachment_filename",
+      "value": "consent_form_test_megha1.pdf"
+    },
+    {
+      "key": "consent_id",
+      "value": ""
+    },
+    {
+      "key": "webhook_url",
+      "value": "http://a2c-webhook.s3-website.ap-south-1.amazonaws.com"
+    },
+    {
+      "key": "webhook_response_url",
+      "value": "http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/respone"
+    },
+    {
+      "key": "webhook_s3_api",
+      "value": "https://a2c-webhook.s3.ap-south-1.amazonaws.com"
+    },
+    {
+      "key": "latest_otp_webhook_key",
+      "value": ""
+    },
+    {
+      "key": "latest_farmer_webhook_key",
+      "value": ""
+    },
+    {
+      "key": "session_id",
+      "value": ""
+    },
+    {
+      "key": "farmer_name",
+      "value": ""
+    },
+    {
+      "key": "farmer_phone",
+      "value": ""
+    },
+    {
+      "key": "otp_identifier",
+      "value": ""
+    },
+    {
+      "key": "otp_identifier_type",
+      "value": ""
+    }
+  ]
+}

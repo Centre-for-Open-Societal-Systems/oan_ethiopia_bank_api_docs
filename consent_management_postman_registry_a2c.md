@@ -1,16 +1,14 @@
 # Consent Management API — Registry A2C
 
-Documentation for the **Consent Management** Postman collection used in the A2C (Access to Credit) loan flow against the OpenG2P/Odoo registry.
+Documentation for the **Consent Management** Postman collection used in the A2C (Access to Credit) loan flow against the ATI Farmer registry (OpenG2P/Odoo).
 
 | Item | Value |
 |------|-------|
-| Registry base URL | [https://registry.oanstaging.com](https://registry.oanstaging.com) |
-| Odoo database | `odoo` |
-| Postman collection | `Consent Management.postman_collection.json` |
+| Registry base URL | [https://farmer-profile.ati.gov.et](https://farmer-profile.ati.gov.et) |
+| Odoo database | `socialregistrydb` |
+| Postman collection | `Consent Management - Registry A2C Prod.postman_collection` |
 | OTP webhook folder | [http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/otp/](http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/otp/) |
 | Farmer data webhook folder | [http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/respone/](http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/respone/) |
-
-> **Note:** HTTP requests to `http://registry.oanstaging.com` are redirected (301). Use **HTTPS** for all API calls.
 
 ---
 
@@ -21,9 +19,9 @@ These APIs let an A2C partner:
 1. Authenticate to the registry
 2. Search for a farmer by registration ID
 3. Request and verify a Fayda OTP
-4. Upload a consent attachment (PDF)
-5. Create and approve a consent request
-6. Receive the farmer’s shared data via a WebSub webhook payload stored in the public S3 bucket
+4. Fetch consent reasons and allowed data fields for the partner
+5. Submit a consent request (with inline PDF attachment) — the registry auto-creates and auto-approves the request
+6. Receive the farmer's shared data via a WebSub webhook payload stored in the public S3 bucket
 
 ---
 
@@ -32,7 +30,7 @@ These APIs let an A2C partner:
 ```mermaid
 sequenceDiagram
     participant Partner as A2C Partner (Postman)
-    participant Registry as registry.oanstaging.com
+    participant Registry as farmer-profile.ati.gov.et
     participant Fayda as Fayda OTP service
     participant OTPBucket as S3 otp/ folder
     participant RespBucket as S3 respone/ folder
@@ -54,15 +52,15 @@ sequenceDiagram
     Partner->>Registry: 5. POST /consent/fayda/verify_otp
     Registry-->>Partner: OTP verified
 
-    Partner->>Registry: 6. POST /api/consent/attachment/upload
-    Registry-->>Partner: attachment_id
+    Partner->>Registry: 6. GET /api/consent/reasons
+    Registry-->>Partner: consent_reason_id
 
-    Partner->>Registry: 7. POST /api/consent/request/create
-    Registry-->>Partner: consent_id (pending)
+    Partner->>Registry: 7. GET /api/consent/allowed_data_fields
+    Registry-->>Partner: allowed_data_field_ids
 
-    Partner->>Registry: 8. POST /api/consent/request/approve
-    Registry->>RespBucket: WebSub farmer payload
-    Registry-->>Partner: status approved
+    Partner->>Registry: 8. POST /api/consent/submit_consent
+    Registry->>RespBucket: WebSub farmer payload (auto-approved)
+    Registry-->>Partner: consent_id
 
     Partner->>RespBucket: 9. Read latest respone/*.json
     RespBucket-->>Partner: farmer + selected_data
@@ -72,15 +70,15 @@ sequenceDiagram
 
 | Step | Request | Notes |
 |------|---------|-------|
-| 1 | `1. login` | Saves session cookie automatically |
+| 1 | `1. login` | Saves session cookie and `partner_id` automatically |
 | 2 | `2. search farmer` | Sets `farmer_db_id` from search results |
 | 3 | `3. request otp` | Sets `transaction_id` collection variable |
 | 4 | `A. list OTP webhooks (S3)` | Lists files under `otp/` |
 | 5 | `B. fetch latest OTP webhook` | Sets `otp_code` from webhook JSON |
 | 6 | `4. verify otp` | Uses `transaction_id` + `otp_code` |
-| 7 | `upload attachment` | Sets `attachment_id` for create consent |
-| 8 | `5. create consent` | Sets `consent_id` collection variable |
-| 9 | `6. approve` | Publishes farmer data webhook |
+| 7 | `5. Fetch Consent Reasons` | Sets `consent_reason_id` |
+| 8 | `6. Fetch Allowed Data Fields` | Sets `allowed_data_field_ids` |
+| 9 | `7. Submit Consent` | Inline attachment; auto-creates and auto-approves |
 | 10 | `C. list farmer webhooks (S3)` | Finds newest file under `respone/` |
 | 11 | `D. fetch latest farmer webhook` | Returns farmer details payload |
 
@@ -97,11 +95,10 @@ All registry endpoints except login require an authenticated Odoo session cookie
 ```json
 {
   "jsonrpc": "2.0",
-  "method": "call",
   "params": {
-    "db": "odoo",
-    "login": "a2capp@test.com",
-    "password": "a2capp@test.com"
+    "db": "socialregistrydb",
+    "login": "test@user.com",
+    "password": "pass"
   }
 }
 ```
@@ -114,9 +111,10 @@ All registry endpoints except login require an authenticated Odoo session cookie
   "id": null,
   "result": {
     "uid": 6,
-    "username": "a2capp@test.com",
-    "name": "a2capp@test.com",
-    "db": "odoo"
+    "username": "test@user.com",
+    "name": "test@user.com",
+    "partner_id": 16,
+    "db": "socialregistrydb"
   }
 }
 ```
@@ -127,11 +125,7 @@ Postman stores the session cookie when **Send cookies** is enabled (default). Ru
 
 ## Registry API endpoints
 
-All registry calls use:
-
-- **Method:** `POST`
-- **Header:** `Content-Type: application/json`
-- **Body format:** JSON-RPC 2.0 with Odoo `type="json"` routes (`method: "call"`, parameters in `params`)
+Registry calls use JSON-RPC 2.0 with Odoo `type="json"` routes (parameters in `params`).
 
 Successful business responses are wrapped as:
 
@@ -163,20 +157,19 @@ Errors:
 
 **POST** `/consent/search_farmer`
 
-Look up a farmer by registration ID, national ID, or other configured identifier before starting the consent flow.
+Look up a farmer by registration ID before starting the consent flow.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `query` | Yes | Search string (e.g. Fayda UID `1234567`) |
+| `farmer_id` | Yes | Farmer registration ID (e.g. Fayda UID `1234567`) |
 
 **Example:**
 
 ```json
 {
   "jsonrpc": "2.0",
-  "method": "call",
   "params": {
-    "query": "1234567"
+    "farmer_id": "1234567"
   }
 }
 ```
@@ -211,7 +204,6 @@ Use the returned `id` as `farmer_db_id` in subsequent requests.
 ```json
 {
   "jsonrpc": "2.0",
-  "method": "call",
   "params": {
     "farmer_id": 30
   }
@@ -230,7 +222,7 @@ Use the returned `id` as `farmer_db_id` in subsequent requests.
 }
 ```
 
-The OTP itself is **not** returned in this response. It is written to the `otp/` folder in the webhook bucket configured for the Fayda/staging integration.
+The OTP itself is **not** returned in this response. It is written to the `otp/` folder in the webhook bucket configured for the Fayda integration.
 
 ### Verify OTP
 
@@ -239,83 +231,103 @@ The OTP itself is **not** returned in this response. It is written to the `otp/`
 ```json
 {
   "jsonrpc": "2.0",
-  "method": "call",
   "params": {
-    "farmer_id": 30,
     "transaction_id": "4886E1A5AD5042FDB49DFFC2EE502E5F",
-    "otp_code": "965332"
+    "otp": "965332",
+    "farmer_id": 30
   }
 }
 ```
+
+> **Note:** The verify endpoint expects the OTP in the `otp` field (not `otp_code`). The Postman collection variable is still named `otp_code`.
 
 OTP codes expire quickly. Always use the value from the latest `otp/` webhook file that matches the `transaction_id` returned by request OTP.
 
-### Upload attachment
+### Fetch consent reasons
 
-**POST** `/api/consent/attachment/upload`
+**GET** `/api/consent/reasons`
 
-Upload a PDF (or other supported document) as base64 before creating the consent request.
-
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `attachment_base64` | Yes | Base64-encoded file content |
-| `attachment_filename` | Yes | Original filename (e.g. `test.pdf`) |
-
-**Example:**
+Retrieves active consent reasons for the authenticated partner.
 
 ```json
 {
   "jsonrpc": "2.0",
-  "method": "call",
-  "params": {
-    "attachment_base64": "<base64-encoded-pdf>",
-    "attachment_filename": "test.pdf"
+  "params": {}
+}
+```
+
+**Success `data` (array or object with `reasons`):**
+
+```json
+[
+  {
+    "id": 1,
+    "name": "A2C loan application",
+    "active": true
   }
-}
+]
 ```
 
-**Success `data`:**
+Use the returned `id` as `consent_reason_id` in submit consent.
+
+### Fetch allowed data fields
+
+**GET** `/api/consent/allowed_data_fields`
+
+Retrieves data fields the partner is permitted to request.
 
 ```json
 {
-  "attachment_id": 566,
-  "attachment_name": "test.pdf"
+  "jsonrpc": "2.0",
+  "params": {}
 }
 ```
 
-### Create consent
+**Success `data` (array or object with `allowed_data_fields`):**
 
-**POST** `/api/consent/request/create`
+```json
+[
+  {
+    "id": 1,
+    "code": "farmer_basic",
+    "name": "Farmer basic information"
+  }
+]
+```
+
+Use the returned IDs in `allowed_data_field_ids` when submitting consent.
+
+### Submit consent
+
+**POST** `/api/consent/submit_consent`
+
+Submits a consent request with an inline PDF attachment. The registry **automatically creates and auto-approves** the consent request — there is no separate create/approve step.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `partner_id` | Yes | Consent parent partner record ID (e.g. `16` for user `a2capp@test.com`) |
-| `farmer_db_id` | Yes* | Registry `res.partner` ID of the approved farmer |
-| `consent_type` | No | Default `specific` |
-| `purpose` | No | Free-text purpose |
-| `validity_from` / `validity_to` | No | Datetime strings `YYYY-MM-DD HH:MM:SS` |
-| `allowed_data_field_ids` | Yes | Array of data-field IDs allowed for this partner |
-| `originated_from` | No | e.g. `partner` |
-| `attachment_ids` | No | Attachment ID from upload step |
-
-\*Alternatively: `farmer_id` or `national_id`.
+| `farmer_id` | Yes | Registry `res.partner` ID of the farmer |
+| `consent_type` | Yes | e.g. `specific` |
+| `consent_reason_id` | Yes | ID from fetch consent reasons |
+| `validity_months` | Yes | Consent validity period in months (e.g. `12`) |
+| `allowed_data_field_ids` | Yes | Array of data-field IDs from fetch allowed data fields |
+| `attachment_base64` | Yes | Base64-encoded PDF content |
+| `attachment_filename` | Yes | Original filename (e.g. `consent_form.pdf`) |
+| `fayda_otp_transaction_id` | Yes | `transaction_id` from the verified OTP step |
 
 **Example:**
 
 ```json
 {
   "jsonrpc": "2.0",
-  "method": "call",
   "params": {
-    "partner_id": 16,
-    "farmer_db_id": 30,
+    "farmer_id": 30,
     "consent_type": "specific",
-    "purpose": "A2C data sharing for agricultural services",
-    "validity_from": "2026-05-06 00:00:00",
-    "validity_to": "2027-05-06 00:00:00",
+    "consent_reason_id": 1,
+    "validity_months": 12,
     "allowed_data_field_ids": [1],
-    "originated_from": "partner",
-    "attachment_ids": 566
+    "attachment_base64": "<base64-encoded-pdf>",
+    "attachment_filename": "consent_form_test.pdf",
+    "fayda_otp_transaction_id": "4886E1A5AD5042FDB49DFFC2EE502E5F"
   }
 }
 ```
@@ -324,41 +336,18 @@ Upload a PDF (or other supported document) as base64 before creating the consent
 
 ```json
 {
-  "id": 96,
-  "consent_creation_request_id": "8e3ce997-dce5-42cc-a6a4-ae3db05b6542",
-  "status": "pending"
+  "consent_id": 96,
+  "status": "approved"
 }
 ```
 
-### Approve consent
-
-**POST** `/api/consent/request/approve`
-
-```json
-{
-  "jsonrpc": "2.0",
-  "method": "call",
-  "params": {
-    "consent_id": 96
-  }
-}
-```
-
-Alternatively use `consent_creation_request_id` instead of `consent_id`.
-
-**Prerequisites for approval:**
-
-- Partner must have an active **External** WebSub configuration with event `WEBSUB_INDIVIDUAL_UPDATED`
-- WebSub hub must deliver to the S3 `respone/` webhook URL
-- `allowed_data_field_ids` must resolve to publishable farmer data
-
-On approval the registry enqueues a WebSub publish job. The farmer payload appears in the response webhook folder shortly after.
+On success the registry enqueues a WebSub publish job. The farmer payload appears in the response webhook folder shortly after.
 
 ---
 
 ## Webhook bucket
 
-The staging environment uses a public S3 website bucket as a webhook sink for testing.
+The integration uses a public S3 website bucket as a webhook sink.
 
 | Location | URL | Purpose |
 |----------|-----|---------|
@@ -374,7 +363,7 @@ Open the [OTP folder](http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/otp
 **Option B — S3 list API (used by Postman helpers)**
 
 ```bash
-curl -s "https://a2c-webhook.s3.ap-south-1.amazonaws.com/?list-type=2&prefix=otp/&max-keys=20"
+curl -s "https://a2c-webhook.s3.ap-south-1.amazonaws.com/?list-type=2&prefix=otp/&max-keys=50"
 ```
 
 Fetch the newest OTP payload:
@@ -405,7 +394,7 @@ Common fields the collection test script checks:
 List files under `respone/`:
 
 ```bash
-curl -s "https://a2c-webhook.s3.ap-south-1.amazonaws.com/?list-type=2&prefix=respone/&max-keys=20"
+curl -s "https://a2c-webhook.s3.ap-south-1.amazonaws.com/?list-type=2&prefix=respone/&max-keys=50"
 ```
 
 Fetch the newest payload (ignore `webhook-respone.json` and `index.html`):
@@ -418,7 +407,7 @@ curl -s "http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/respone/2026-06-
 
 ## Sample farmer webhook payload
 
-After approval, a file similar to this appears under `respone/`:
+After submit consent (auto-approval), a file similar to this appears under `respone/`:
 
 ```json
 {
@@ -439,7 +428,7 @@ After approval, a file similar to this appears under `respone/`:
   },
   "consent_partner": {
     "id": 16,
-    "name": "a2capp@test.com",
+    "name": "test@user.com",
     "ref": false,
     "websub_config_id": 2,
     "websub_config_name": "Local Test WebSub (Mock)1"
@@ -487,19 +476,24 @@ After approval, a file similar to this appears under `respone/`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `base_url` | `https://registry.oanstaging.com` | Registry base URL (HTTPS) |
-| `db` | `odoo` | Odoo database |
-| `login` / `password` | `a2capp@test.com` | Test partner credentials |
-| `partner_id` | `16` | Consent parent partner for `a2capp@test.com` |
-| `farmer_db_id` | `30` | Test farmer (set automatically by search) |
-| `farmer_query` | `1234567` | Search query for `2. search farmer` |
-| `allowed_data_field_ids` | `[1]` | Must match partner-allowed fields |
+| `base_url` | `https://farmer-profile.ati.gov.et` | Registry base URL |
+| `db` | `socialregistrydb` | Odoo database |
+| `login` / `password` | `test@user.com` / `pass` | Test partner credentials |
+| `partner_id` | `16` | Consent parent partner (set by login) |
+| `farmer_query_id` | `1234567` | Registration ID for `2. search farmer` |
+| `farmer_db_id` | `30` | Registry farmer ID (set automatically by search) |
+| `consent_type` | `specific` | Consent type for submit |
+| `consent_reason_id` | `1` | From fetch consent reasons (auto-set) |
+| `validity_months` | `12` | Consent validity in months |
+| `allowed_data_field_ids` | `[1]` | From fetch allowed data fields (auto-set) |
+| `attachment_base64` | *(sample PDF)* | Inline PDF for submit consent |
+| `attachment_filename` | `consent_form_test_megha1.pdf` | Filename for inline attachment |
 | `transaction_id` | *(auto)* | From request OTP |
 | `otp_code` | *(auto)* | From OTP webhook |
-| `consent_id` | *(auto)* | From create consent |
-| `attachment_id` | *(auto)* | From upload attachment |
+| `consent_id` | *(auto)* | From submit consent |
 | `webhook_url` | S3 website root | OTP bucket browser/API |
 | `webhook_response_url` | S3 `respone/` path | Farmer payload folder |
+| `webhook_s3_api` | `https://a2c-webhook.s3.ap-south-1.amazonaws.com` | S3 list API for webhook helpers |
 
 ---
 
@@ -512,17 +506,16 @@ chmod +x test_consent_management_apis.sh
 ./test_consent_management_apis.sh
 ```
 
-The script runs the full Postman flow: login → search farmer → request OTP → verify OTP → upload attachment → create consent → approve → fetch farmer webhook.
+The script runs the full Postman flow: login → search farmer → request OTP → verify OTP → fetch consent reasons → fetch allowed data fields → submit consent → fetch farmer webhook.
 
 Override defaults with environment variables:
 
 ```bash
-BASE_URL=https://registry.oanstaging.com \
-DB=odoo \
-LOGIN=a2capp@test.com \
-PASSWORD=a2capp@test.com \
-PARTNER_ID=16 \
-FARMER_QUERY=1234567 \
+BASE_URL=https://farmer-profile.ati.gov.et \
+DB=socialregistrydb \
+LOGIN=test@user.com \
+PASSWORD=pass \
+FARMER_QUERY_ID=1234567 \
 ./test_consent_management_apis.sh
 ```
 
@@ -532,28 +525,26 @@ If OTP auto-detection from S3 fails (webhook delivery delay), pass the code manu
 OTP_CODE=965332 TX_ID=C67AC60C2FF541BBB0150F0E425C4783 ./test_consent_management_apis.sh
 ```
 
-**Verified on staging (2026-06-06):** login, search farmer, request OTP, upload attachment, create consent, and approve all returned HTTP 200. Farmer webhook `respone/2026-06-06T10-40-35_a4014132.json` was published after approval. OTP webhook delivery to `otp/` was stale during testing; verify OTP may fail with expired codes but the remaining flow still succeeds on staging.
-
 ---
 
 ## Troubleshooting
 
 | Symptom | Likely cause |
 |---------|--------------|
-| `301 Moved Permanently` or `Invalid JSON data` | Using HTTP instead of HTTPS |
-| `Database not found` | Wrong `db` value — staging uses `odoo`, not `management` |
+| `Database not found` | Wrong `db` value — production uses `socialregistrydb` |
 | `Access denied` on OTP endpoints | User is not linked to a consent parent partner |
 | `No valid allowed_data_field_ids` | Field IDs not configured on the partner |
-| `WebSub configuration is not selected` on approve | Partner missing active External WebSub config |
 | OTP verify fails (`OTP session expired`) | Expired OTP, stale webhook file, or `transaction_id` mismatch |
+| OTP verify fails with field error | Using `otp_code` instead of `otp` in verify request body |
 | No new file in `otp/` | Fayda callback not reaching the bucket; use manual `OTP_CODE` |
-| No file in `respone/` | Approval failed, WebSub not configured, or job still queued |
+| No file in `respone/` | Submit consent failed, WebSub not configured, or job still queued |
 | Empty `selected_data` in webhook | WebSub config has no publishable fields for this farmer |
+| Farmer search returns no results | Wrong `farmer_query_id` or farmer not registered |
 
 ---
 
 ## Related resources
 
-- Registry login UI: [https://registry.oanstaging.com](https://registry.oanstaging.com)
+- Registry: [https://farmer-profile.ati.gov.et](https://farmer-profile.ati.gov.et)
 - OTP webhook browser: [http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/otp/](http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/otp/)
 - Farmer webhook browser: [http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/respone/](http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/respone/)

@@ -6,24 +6,25 @@
 
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-https://registry.oanstaging.com}"
+BASE_URL="${BASE_URL:-https://farmer-profile.ati.gov.et}"
 BASE_URL="${BASE_URL%/}"
 WEBHOOK_URL="${WEBHOOK_URL:-http://a2c-webhook.s3-website.ap-south-1.amazonaws.com}"
 WEBHOOK_S3_API="${WEBHOOK_S3_API:-https://a2c-webhook.s3.ap-south-1.amazonaws.com}"
 WEBHOOK_RESPONSE_URL="${WEBHOOK_RESPONSE_URL:-${WEBHOOK_URL}/respone}"
 
-DB="${DB:-odoo}"
-LOGIN="${LOGIN:-a2capp@test.com}"
-PASSWORD="${PASSWORD:-a2capp@test.com}"
-PARTNER_ID="${PARTNER_ID:-16}"
-FARMER_QUERY="${FARMER_QUERY:-1234567}"
+DB="${DB:-socialregistrydb}"
+LOGIN="${LOGIN:-test@user.com}"
+PASSWORD="${PASSWORD:-pass}"
+FARMER_QUERY_ID="${FARMER_QUERY_ID:-1234567}"
+CONSENT_TYPE="${CONSENT_TYPE:-specific}"
+VALIDITY_MONTHS="${VALIDITY_MONTHS:-12}"
 ALLOWED_DATA_FIELD_IDS="${ALLOWED_DATA_FIELD_IDS:-[1]}"
-VALIDITY_FROM="${VALIDITY_FROM:-2026-05-06 00:00:00}"
-VALIDITY_TO="${VALIDITY_TO:-2027-05-06 00:00:00}"
+CONSENT_REASON_ID="${CONSENT_REASON_ID:-}"
 OTP_POLL_SECONDS="${OTP_POLL_SECONDS:-30}"
 
-# Minimal PDF (Hello World) for attachment upload
+# Minimal PDF for inline attachment in submit_consent
 ATTACHMENT_BASE64="${ATTACHMENT_BASE64:-JVBERi0xLjQKJdPr6eEKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKL01lZGlhQm94IFswIDAgMzAwIDE0NF0KPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovUmVzb3VyY2VzIDw8Ci9Gb250IDw8Ci9GMSA0IDAgUgo+Pgo+PgovQ29udGVudHMgNSAwIFIKPj4KZW5kb2JqCjQgMCBvYmoKPDwKL1R5cGUgL0ZvbnQKL1N1YnR5cGUgL1R5cGUxCi9CYXNlRm9udCAvSGVsdmV0aWNhCj4+CmVuZG9iago1IDAgb2JqCjw8Ci9MZW5ndGggNDQKPj4Kc3RyZWFtCkJUCjcwIDUwIFRECi9GMSAxMiBUZgooSGVsbG8gV29ybGQhKSBUagpFVAplbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU4IDAwMDAwIG4gCjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAwMDAwMDIxNSAwMDAwMCBuIAowMDAwMDAwMjgyIDAwMDAwIG4gCnRyYWlsZXIKPDwKL1NpemUgNgovUm9vdCAxIDAgUgo+PgpzdGFydHhyZWYKMzc2CiUlRU9GCg==}"
+ATTACHMENT_FILENAME="${ATTACHMENT_FILENAME:-consent_form_test.pdf}"
 
 COOKIE_JAR="$(mktemp /tmp/consent_cookies.XXXXXX)"
 trap 'rm -f "$COOKIE_JAR"' EXIT
@@ -43,6 +44,27 @@ call_registry() {
   local resp
   resp=$(curl -sSL -w "\n__HTTP_CODE__:%{http_code}" -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
     -X POST "${BASE_URL}${path}" \
+    -H "Content-Type: application/json" \
+    -d "$body")
+  local code
+  code=$(echo "$resp" | grep '__HTTP_CODE__:' | cut -d: -f2)
+  local json
+  json=$(echo "$resp" | sed '/__HTTP_CODE__:/d')
+  LAST_JSON="$json"
+  echo "$json" | pretty_json
+  echo "HTTP $code"
+}
+
+call_registry_get() {
+  local name="$1"
+  local path="$2"
+  local body="${3:-{\"jsonrpc\": \"2.0\", \"params\": {}}}"
+  echo ""
+  echo "========== $name =========="
+  echo "GET ${BASE_URL}${path}"
+  local resp
+  resp=$(curl -sSL -w "\n__HTTP_CODE__:%{http_code}" -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
+    -X GET "${BASE_URL}${path}" \
     -H "Content-Type: application/json" \
     -d "$body")
   local code
@@ -117,7 +139,6 @@ echo "Response : $WEBHOOK_RESPONSE_URL"
 
 call_registry "1. login" "/web/session/authenticate" "{
   \"jsonrpc\": \"2.0\",
-  \"method\": \"call\",
   \"params\": {
     \"db\": \"${DB}\",
     \"login\": \"${LOGIN}\",
@@ -131,9 +152,8 @@ fi
 
 call_registry "2. search farmer" "/consent/search_farmer" "{
   \"jsonrpc\": \"2.0\",
-  \"method\": \"call\",
   \"params\": {
-    \"query\": \"${FARMER_QUERY}\"
+    \"farmer_id\": \"${FARMER_QUERY_ID}\"
   }
 }"
 FARMER_DB_ID=$(echo "$LAST_JSON" | python3 -c "
@@ -143,14 +163,13 @@ farmers = (d.get('result') or {}).get('data', {}).get('farmers') or []
 print(farmers[0]['id'] if farmers else '')
 " 2>/dev/null || true)
 if [[ -z "$FARMER_DB_ID" ]]; then
-  echo "Farmer search failed for query=${FARMER_QUERY}." >&2
+  echo "Farmer search failed for farmer_id=${FARMER_QUERY_ID}." >&2
   exit 1
 fi
 echo "Using farmer_db_id=$FARMER_DB_ID"
 
 call_registry "3. request otp" "/consent/fayda/request_otp" "{
   \"jsonrpc\": \"2.0\",
-  \"method\": \"call\",
   \"params\": {
     \"farmer_id\": ${FARMER_DB_ID}
   }
@@ -163,7 +182,7 @@ print((d.get('result') or {}).get('data', {}).get('transaction_id', ''))
 
 if [[ -z "${OTP_CODE:-}" ]]; then
   echo ""
-  echo "========== 4. fetch OTP from webhook bucket =========="
+  echo "========== fetch OTP from webhook bucket =========="
   if [[ -n "$TX_ID" ]] && poll_otp_for_transaction "$TX_ID"; then
     :
   else
@@ -186,75 +205,81 @@ if [[ -z "$OTP_CODE" || -z "$TX_ID" ]]; then
 fi
 echo "Using transaction_id=$TX_ID otp_code=$OTP_CODE"
 
-call_registry "5. verify otp" "/consent/fayda/verify_otp" "{
+call_registry "4. verify otp" "/consent/fayda/verify_otp" "{
   \"jsonrpc\": \"2.0\",
-  \"method\": \"call\",
   \"params\": {
-    \"farmer_id\": ${FARMER_DB_ID},
     \"transaction_id\": \"${TX_ID}\",
-    \"otp_code\": \"${OTP_CODE}\"
+    \"otp\": \"${OTP_CODE}\",
+    \"farmer_id\": ${FARMER_DB_ID}
   }
 }"
 if echo "$LAST_JSON" | grep -q '"success": false'; then
-  echo "OTP verify failed (may be expired). Continuing — staging may allow consent without fresh OTP." >&2
-fi
-
-call_registry "6. upload attachment" "/api/consent/attachment/upload" "{
-  \"jsonrpc\": \"2.0\",
-  \"method\": \"call\",
-  \"params\": {
-    \"attachment_base64\": \"${ATTACHMENT_BASE64}\",
-    \"attachment_filename\": \"test.pdf\"
-  }
-}"
-ATTACHMENT_ID=$(echo "$LAST_JSON" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-data = (d.get('result') or {}).get('data') or {}
-print(data.get('attachment_id', ''))
-" 2>/dev/null || true)
-if [[ -z "$ATTACHMENT_ID" ]]; then
-  echo "Attachment upload failed." >&2
+  echo "OTP verify failed (may be expired)." >&2
   exit 1
 fi
-echo "Using attachment_id=$ATTACHMENT_ID"
 
-call_registry "7. create consent" "/api/consent/request/create" "{
+call_registry_get "5. fetch consent reasons" "/api/consent/reasons"
+if [[ -z "$CONSENT_REASON_ID" ]]; then
+  CONSENT_REASON_ID=$(echo "$LAST_JSON" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+data = (d.get('result') or {}).get('data') or []
+if isinstance(data, list) and data:
+    print(data[0].get('id', ''))
+elif isinstance(data, dict):
+    reasons = data.get('reasons') or []
+    if reasons:
+        print(reasons[0].get('id', ''))
+" 2>/dev/null || true)
+fi
+CONSENT_REASON_ID="${CONSENT_REASON_ID:-1}"
+echo "Using consent_reason_id=$CONSENT_REASON_ID"
+
+call_registry_get "6. fetch allowed data fields" "/api/consent/allowed_data_fields"
+ALLOWED_FROM_API=$(echo "$LAST_JSON" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+data = (d.get('result') or {}).get('data') or []
+ids = []
+if isinstance(data, list) and data:
+    ids = [data[0].get('id')]
+elif isinstance(data, dict):
+    fields = data.get('allowed_data_fields') or []
+    if fields:
+        ids = [fields[0].get('id')]
+if ids and ids[0]:
+    print(json.dumps(ids))
+" 2>/dev/null || true)
+if [[ -n "$ALLOWED_FROM_API" ]]; then
+  ALLOWED_DATA_FIELD_IDS="$ALLOWED_FROM_API"
+fi
+echo "Using allowed_data_field_ids=$ALLOWED_DATA_FIELD_IDS"
+
+call_registry "7. submit consent" "/api/consent/submit_consent" "{
   \"jsonrpc\": \"2.0\",
-  \"method\": \"call\",
   \"params\": {
-    \"partner_id\": ${PARTNER_ID},
-    \"farmer_db_id\": ${FARMER_DB_ID},
-    \"consent_type\": \"specific\",
-    \"purpose\": \"A2C data sharing for agricultural services\",
-    \"validity_from\": \"${VALIDITY_FROM}\",
-    \"validity_to\": \"${VALIDITY_TO}\",
+    \"farmer_id\": ${FARMER_DB_ID},
+    \"consent_type\": \"${CONSENT_TYPE}\",
+    \"consent_reason_id\": ${CONSENT_REASON_ID},
+    \"validity_months\": ${VALIDITY_MONTHS},
     \"allowed_data_field_ids\": ${ALLOWED_DATA_FIELD_IDS},
-    \"originated_from\": \"partner\",
-    \"attachment_ids\": ${ATTACHMENT_ID}
+    \"attachment_base64\": \"${ATTACHMENT_BASE64}\",
+    \"attachment_filename\": \"${ATTACHMENT_FILENAME}\",
+    \"fayda_otp_transaction_id\": \"${TX_ID}\"
   }
 }"
 CONSENT_ID=$(echo "$LAST_JSON" | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
-print((d.get('result') or {}).get('data', {}).get('id', ''))
+data = (d.get('result') or {}).get('data') or {}
+print(data.get('consent_id') or data.get('id') or '')
 " 2>/dev/null || true)
-if [[ -z "$CONSENT_ID" ]]; then
-  echo "Create consent failed." >&2
-  exit 1
+if [[ -n "$CONSENT_ID" ]]; then
+  echo "Using consent_id=$CONSENT_ID"
 fi
-echo "Using consent_id=$CONSENT_ID"
-
-call_registry "8. approve" "/api/consent/request/approve" "{
-  \"jsonrpc\": \"2.0\",
-  \"method\": \"call\",
-  \"params\": {
-    \"consent_id\": ${CONSENT_ID}
-  }
-}"
 
 echo ""
-echo "========== 9. fetch latest farmer webhook =========="
+echo "========== 8. fetch latest farmer webhook =========="
 sleep 4
 RESP_KEY=$(fetch_latest_s3_key "respone/")
 if [[ -n "$RESP_KEY" ]]; then
