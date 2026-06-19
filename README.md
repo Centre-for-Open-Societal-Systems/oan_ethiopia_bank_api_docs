@@ -1,73 +1,112 @@
 # OAN Ethiopia Bank API Docs
 
-Documentation and tooling for **Open Agri Net (OAN)** registry bank-access APIs, focused on the **Consent Management** flow used in the A2C (Access to Credit) loan integration with the OpenG2P/Odoo registry.
+Documentation and tooling for **Open Agri Net (OAN)** registry bank-access APIs, focused on the **Consent Management** flow used in the A2C (Access to Credit) loan integration with the ATI Farmer registry (OpenG2P/Odoo).
 
 ## What's in this repo
 
 | File | Description |
 |------|-------------|
-| [`consent_management_postman_registry_a2c_workflow.md`](consent_management_postman_registry_a2c_workflow.md) | Full API reference — endpoints, payloads and webhooks |
-| [`Consent Management.postman_collection.json`](Consent%20Management.postman_collection.json) | Postman collection for the end-to-end consent flow |
-| [`test_consent_management_apis.sh`](test_consent_management_apis.sh) | Bash script that runs the same flow from the terminal |
+| [`consent_management_postman_registry_a2c.md`](consent_management_postman_registry_a2c.md) | API reference — endpoints, payloads, environment config, troubleshooting |
+| [`consent_management_postman_registry_a2c_workflow.md`](consent_management_postman_registry_a2c_workflow.md) | Production workflow guide with UI screenshots and per-step variable tables |
+| [`Consent Management.postman_collection.json`](Consent%20Management.postman_collection.json) | Postman collection configured for **production** |
+| [`test_consent_management_apis.sh`](test_consent_management_apis.sh) | Bash script — defaults to **staging**; supports production via `ENV=production` |
 
-## Staging environment
+## Environments
 
-| Item                 | Value                                                                                                                              |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Registry             | [https://farmer-profile.ati.gov.et](https://farmer-profile.ati.gov.et)                                                                 |
-| Odoo database        | Please contact the administrator                                                                                                                             |
-| Test credentials     | Please contact the administartor                                                                                                    |
-| OTP webhook folder   | Given the api is hitting production and connected to fayda, the OTP will be recieved on the mobile         |
-| Farmer data webhooks | The resposne will come to kafka and need to subscribed to be delivered to the required application |
+The same API flow applies in both environments. Differences are mainly registry URL, credentials, OTP delivery, and how approved farmer data is received.
+
+### Staging (integration testing)
+
+Use staging for end-to-end testing without real Fayda SMS or Kafka subscriptions. OTP callbacks and farmer payloads are written to a public S3 webhook bucket.
+
+| Item | Value |
+|------|-------|
+| Registry | [https://registry.oanstaging.com](https://registry.oanstaging.com) |
+| Odoo database | `odoo` |
+| Test credentials | `a2capp@test.com` / `a2capp@test.com` |
+| OTP delivery | S3 bucket — [otp/](http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/otp/) |
+| Farmer data delivery | S3 bucket — [respone/](http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/respone/) |
+| Recommended tooling | `test_consent_management_apis.sh` (default) |
+
+### Production (ATI Farmer)
+
+The Postman collection ships with production defaults. OTP is sent to the farmer's mobile via Fayda; approved data is published to Kafka for the partner application to consume.
+
+| Item | Value |
+|------|-------|
+| Registry | [https://farmer-profile.ati.gov.et](https://farmer-profile.ati.gov.et) |
+| Odoo database | `socialregistrydb` |
+| Credentials | Contact the administrator |
+| OTP delivery | Farmer's mobile (Fayda) |
+| Farmer data delivery | Kafka — partner application must subscribe |
+| Recommended tooling | Postman collection (import as-is) |
+
+> **Note:** Use HTTPS for all API calls. HTTP to `registry.oanstaging.com` returns a 301 redirect.
 
 ## End-to-end flow
-
-An A2C partner uses these APIs to search for a farmer, verify identity via Fayda OTP, attach supporting documents, approve consent, and receive shared farmer data through a WebSub webhook.
 
 1. **Login** — authenticate and obtain an Odoo session cookie
 2. **Search farmer** — look up farmer by registration ID
 3. **Request OTP** — trigger Fayda OTP delivery
-4. **Verify OTP** — Verify the OTO recieved from the Farmer
-5. **Fetch Consent Reasons** — Fetch the consent reasons from registry to be displayed in the UI, for initiating the consent request
-6. **Fetch Allowed Data Fields** — Fetch the allowed whitelisted fields provisioned for the patrner profile, only the whitlisted fields can be retrived from regsitry as part of consent
-7. **Submit Consent** — Submit the request to create the consent artefact, given tgis OTP drive, it will be auto approved and the requseted data will be shared to kafka, the initiatiating application needs to be susbcribe to kafka to retrieve the data.
+4. **Obtain OTP** — read from S3 webhook (staging) or farmer's mobile (production)
+5. **Verify OTP** — confirm the farmer's identity
+6. **Fetch consent reasons** — retrieve active consent reasons
+7. **Fetch allowed data fields** — retrieve fields the partner may request
+8. **Submit consent** — submit with inline PDF; registry auto-creates and auto-approves
+9. **Receive farmer data** — read from S3 `respone/` (staging) or Kafka (production)
 
-See the [detailed documentation](consent_management_postman_registry_a2c_workflow.md) for request/response examples and collection variables.
+See [`consent_management_postman_registry_a2c.md`](consent_management_postman_registry_a2c.md) for endpoint details and [`consent_management_postman_registry_a2c_workflow.md`](consent_management_postman_registry_a2c_workflow.md) for the production UI workflow.
 
-## Quick start — Postman
+## Quick start — Postman (production)
 
-1. Import [`Consent Management.postman_collection.json`](Consent%20Management.postman_collection.json) into Postman.
-2. Review or adjust collection variables (`base_url`, `db`, `login`, `password`, `partner_id`, `farmer_query`, etc.).
-3. Run requests in order: `1. login` → `2. search farmer` → `3. request otp` → webhook helpers → `4. verify otp` → `upload attachment` → `5. create consent` → `6. approve` → farmer webhook helpers.
+The collection is pre-configured for production (`farmer-profile.ati.gov.et`).
 
-The collection includes test scripts that auto-save `farmer_db_id`, `consent_id`, `transaction_id`, `otp_code`, and `attachment_id` between steps.
+1. Import [`Consent Management.postman_collection.json`](Consent%20Management.postman_collection.json).
+2. Set credentials (`login`, `password`) provided by the administrator.
+3. Run in order: `1. login` → `2. search farmer` → `3. request otp` → `4. verify otp` → `5. Fetch Consent Reasons` → `6. Fetch Allowed Data Fields` → `7. Submit Consent`.
 
-## Quick start — terminal
+For **staging** in Postman, override collection variables:
 
-If you are testing this against our staging env [https://registry.oanstaging.com](https://registry.oanstaging.com) you can use the bewlo code and script files for testing
+| Variable | Staging value |
+|----------|---------------|
+| `base_url` | `https://registry.oanstaging.com` |
+| `db` | `odoo` |
+| `login` / `password` | `a2capp@test.com` |
+| `farmer_query_id` | Your test farmer ID |
+
+Then use the **Webhook Helpers** folder to fetch OTP from S3 before verify.
+
+## Quick start — terminal (staging)
 
 ```bash
 chmod +x test_consent_management_apis.sh
 ./test_consent_management_apis.sh
 ```
 
-Override defaults with environment variables:
+Defaults target staging. Override if needed:
 
 ```bash
 BASE_URL=https://registry.oanstaging.com \
 DB=odoo \
 LOGIN=a2capp@test.com \
 PASSWORD=a2capp@test.com \
-PARTNER_ID=16 \
-FARMER_QUERY=1234567 \
+FARMER_QUERY_ID=1234567 \
 ./test_consent_management_apis.sh
 ```
 
-If OTP auto-detection from S3 fails, pass the code manually:
+### Terminal (production)
 
 ```bash
-OTP_CODE=965332 TX_ID=C67AC60C2FF541BBB0150F0E425C4783 ./test_consent_management_apis.sh
+ENV=production \
+LOGIN=your@user.com \
+PASSWORD=yourpass \
+FARMER_QUERY_ID=1234567 \
+OTP_CODE=123456 \
+TX_ID=your-transaction-id \
+./test_consent_management_apis.sh
 ```
+
+Production requires a real OTP from the farmer's mobile — S3 OTP polling is skipped.
 
 ## License
 

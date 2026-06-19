@@ -1,6 +1,15 @@
 # Consent Portal Workflow & Webhook Testing Guide
 
-Follow these steps to submit consent requests on the Agricultural Transformation Institute (ATI) Consent Portal and verify the associated OTP and webhook responses.
+Follow these steps to submit consent requests on the Agricultural Transformation Institute (ATI) **production** Consent Portal and verify the associated OTP and webhook responses.
+
+This guide matches the **production** Postman collection (`Consent Management.postman_collection.json`). For staging integration testing with S3 webhook buckets, see [`consent_management_postman_registry_a2c.md`](consent_management_postman_registry_a2c.md).
+
+| | Production (this guide) | Staging |
+|---|------------------------|---------|
+| Registry | `https://farmer-profile.ati.gov.et` | `https://registry.oanstaging.com` |
+| Database | `socialregistrydb` | `odoo` |
+| OTP source | Farmer's mobile (Fayda) | S3 `otp/` webhook folder |
+| Farmer data | Kafka subscription | S3 `respone/` webhook folder |
 
 ---
 
@@ -26,11 +35,11 @@ Except for the authentication endpoint, all registry endpoints require an active
 
 #### Variables
 
-| Variable | Source | Example |
-|----------|--------|---------|
-| `{{db}}` | The Odoo database name to authenticate against | `odoo` |
-| `{{login}}` | The consent partner account username/email | `a2capp@test.com` |
-| `{{password}}` | The consent partner account password | `a2capp@test.com` |
+| Variable | Source | Example (production) |
+|----------|--------|----------------------|
+| `{{db}}` | The Odoo database name to authenticate against | `socialregistrydb` |
+| `{{login}}` | The consent partner account username/email | Contact administrator |
+| `{{password}}` | The consent partner account password | Contact administrator |
 
 Postman automatically handles session cookies if the **Send cookies** option is enabled (default behavior). Ensure you run the authentication request before invoking any other registry endpoint.
 
@@ -307,7 +316,7 @@ Once the OTP request is triggered, the modal displays a confirmation message alo
 
 ![Postman Fetch Consent Reasons](pics/postman-reasons-request.png)
 
-**POST** `/api/consent/reasons`
+**GET** `/api/consent/reasons`
 
 Retrieve the active consent reasons configured in the registry.
 
@@ -319,6 +328,8 @@ Retrieve the active consent reasons configured in the registry.
   "params": {}
 }
 ```
+
+> On **staging**, this endpoint may be called as `POST` with `"method": "call"`.
 
 ### Success Response
 
@@ -364,7 +375,7 @@ The frontend application queries this endpoint when rendering the **Consent Deta
 
 ![Postman Fetch Allowed Data Fields Endpoint](pics/postman-allowed-fields-request.png)
 
-**POST** `/api/consent/allowed_data_fields`
+**GET** `/api/consent/allowed_data_fields`
 
 Retrieve the list of data fields that this consent partner is authorized to request.
 
@@ -376,6 +387,8 @@ Retrieve the list of data fields that this consent partner is authorized to requ
   "params": {}
 }
 ```
+
+> On **staging**, this endpoint may be called as `POST` with `"method": "call"`.
 
 ### Success Response
 
@@ -495,9 +508,16 @@ Once all fields are filled, click the **Submit Request** button to submit the ap
 
 ---
 
-## Step 8: Webhook Payload (Individual Updated)
+## Step 8: Farmer Data Delivery
 
-Following auto-approval, a WebSub event payload similar to the one below is dispatched to the partner's configured webhook endpoint:
+Following auto-approval, farmer data is published to the partner's configured delivery channel.
+
+- **Production:** data is sent to **Kafka** — the initiating application must subscribe to receive it.
+- **Staging:** data is written to the public S3 **`respone/`** folder (see [`consent_management_postman_registry_a2c.md`](consent_management_postman_registry_a2c.md)).
+
+### Sample WebSub / Kafka payload
+
+A payload similar to the one below is dispatched after approval:
 
 ```json
 {
