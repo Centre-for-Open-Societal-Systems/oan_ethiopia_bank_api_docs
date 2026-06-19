@@ -12,12 +12,12 @@ Documentation and tooling for **Open Agri Net (OAN)** registry bank-access APIs,
 
 ## Staging environment
 
-| Item | Value |
-|------|-------|
-| Registry | [https://registry.oanstaging.com](https://registry.oanstaging.com) |
-| Odoo database | `odoo` |
-| Test credentials | `a2capp@test.com` / `a2capp@test.com` |
-| OTP webhook folder | [http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/otp/](http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/otp/) |
+| Item                 | Value                                                                                                                              |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Registry             | [https://registry.oanstaging.com](https://registry.oanstaging.com)                                                                 |
+| Odoo database        | `odoo`                                                                                                                             |
+| Test credentials     | `a2c@test.com` / `a2c@test.com`                                                                                                    |
+| OTP webhook folder   | [http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/otp/](http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/otp/)         |
 | Farmer data webhooks | [http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/respone/](http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/respone/) |
 
 ## End-to-end flow
@@ -34,7 +34,7 @@ An A2C partner uses these APIs to search for a farmer, verify identity via Fayda
 8. **Approve consent** — approve the request; registry publishes farmer data
 9. **Fetch farmer data** — read the approved payload from the `respone/` webhook folder
 
-See the [detailed documentation](consent_management_postman_registry_a2c.md) for request/response examples, collection variables, and troubleshooting.
+See the [detailed documentation](consent_management_postman_registry_a2c.md) for request/response examples, collection variables, and troubleshooting and for a detailed workflow  look at [[workflow]]
 
 ## Quick start — Postman
 
