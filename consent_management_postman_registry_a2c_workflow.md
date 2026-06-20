@@ -9,7 +9,7 @@ This guide matches the **production** Postman collection (`Consent Management.po
 | Registry | `https://farmer-profile.ati.gov.et` | `https://registry.oanstaging.com` |
 | Database | `socialregistrydb` | `odoo` |
 | OTP source | Farmer's mobile (Fayda) | S3 `otp/` webhook folder |
-| Farmer data | Kafka subscription | S3 `respone/` webhook folder |
+| Farmer data | Inline in Submit Consent `response_data` | S3 `respone/` webhook folder |
 
 ---
 
@@ -426,7 +426,7 @@ The frontend application queries this endpoint when rendering the **Consent Deta
 
 **POST** `/api/consent/submit_consent`
 
-Submit the consent request with the validated OTP transaction ID and the signed consent document. Successful validation triggers immediate auto-approval.
+Submit the consent request with the validated OTP transaction ID and the signed consent document. Successful validation triggers immediate auto-approval and returns the farmer payload inline in `response_data`.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
@@ -472,6 +472,8 @@ Submit the consent request with the validated OTP transaction ID and the signed 
 
 ### Success Response
 
+On HTTP 200 / `result.success: true`, the response includes consent status and the full farmer data in `result.data.response_data`:
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -480,16 +482,95 @@ Submit the consent request with the validated OTP transaction ID and the signed 
     "success": true,
     "message": "OK",
     "data": {
-      "consent_id": 18,
+      "consent_id": 9,
       "status": "approved",
       "auto_approved": true,
       "auto_approval_failed": false,
       "auto_approve_method": "otp",
-      "error_details": null
+      "error_details": null,
+      "response_data": {
+        "source": "g2p_ati_consent_mgt",
+        "event_type": "WEBSUB_INDIVIDUAL_UPDATED",
+        "published_at": "2026-06-20 13:27:07",
+        "consent": {
+          "id": 10,
+          "consent_creation_request_id": "9cd96a35-f9b4-457c-98f9-d49080972380",
+          "consent_type": "specific",
+          "status": "approved",
+          "approved_at": "2026-06-20 13:27:07",
+          "validity_from": "2026-06-20 13:27:07",
+          "validity_to": "2027-06-15 13:27:07",
+          "requested_field_codes": [
+            "NAME", "GENDER", "DOB-GC", "Email", "MARITIAL-STATUS",
+            "NUM-CHILDREN", "HH-HEAD", "NUM_MALES", "NUM-FEMALES",
+            "FAMILY-SIZE", "LAND", "REGION", "ZONE", "woreda", "KEBELE",
+            "GEO-LON", "GEO-LAT"
+          ],
+          "published_field_codes": [
+            "NAME", "GENDER", "DOB-GC", "Email", "MARITIAL-STATUS",
+            "NUM-CHILDREN", "HH-HEAD", "NUM_MALES", "NUM-FEMALES",
+            "FAMILY-SIZE", "LAND", "REGION", "ZONE", "woreda", "KEBELE",
+            "GEO-LON", "GEO-LAT"
+          ],
+          "data_field_mode": "dynamic"
+        },
+        "consent_partner": {
+          "id": 264515,
+          "name": "COOP BANK",
+          "ref": false,
+          "websub_config_id": 4,
+          "websub_config_name": "COOP"
+        },
+        "farmer": {
+          "id": 612961,
+          "farmer_id": "FR-9075201458",
+          "name": "TEST TEST TEST"
+        },
+        "selected_data": {
+          "NAME": { "name": "TEST TEST TEST" },
+          "GENDER": { "gender": "male" },
+          "DOB-GC": { "date_of_birth_gc": "1985-06-12" },
+          "Email": { "email": false },
+          "MARITIAL-STATUS": { "marital_status": "married" },
+          "NUM-CHILDREN": { "number_of_children_in_the_family": 2 },
+          "HH-HEAD": { "hh_head": "yes" },
+          "NUM_MALES": { "number_of_males_in_family": 5 },
+          "NUM-FEMALES": { "number_of_females_in_family": 4 },
+          "FAMILY-SIZE": { "family_size": 0 },
+          "LAND": [
+            {
+              "land_informations": {
+                "id": 1333913,
+                "name": "TEST TEST TEST"
+              }
+            }
+          ],
+          "REGION": {
+            "region": { "id": 24, "name": "Oromiya", "code": "ET04" }
+          },
+          "ZONE": {
+            "zone": { "id": 70, "name": "Mirab Shewa", "code": "ET0405" }
+          },
+          "woreda": {
+            "woreda": { "id": 688, "name": "Cheliya", "code": "ET040505" }
+          },
+          "KEBELE": {
+            "kebele": { "id": 10835, "name": "Bilof Keku", "code": "40505888003" }
+          },
+          "GEO-LON": { "geo_longitude": 0.0 },
+          "GEO-LAT": { "geo_latitude": 0.0 }
+        }
+      }
     }
   }
 }
 ```
+
+| Field | Meaning |
+|-------|---------|
+| `data.consent_id` | Approved consent record ID |
+| `data.response_data` | Full farmer payload — use this directly; no Kafka subscription required |
+| `data.response_data.selected_data` | Published values keyed by field code (e.g. `NAME`, `GENDER`, `REGION`) |
 
 #### User Interface
 
@@ -508,16 +589,15 @@ Once all fields are filled, click the **Submit Request** button to submit the ap
 
 ---
 
-## Step 8: Farmer Data Delivery
+## Step 8: Farmer Data (staging only)
 
-Following auto-approval, farmer data is published to the partner's configured delivery channel.
+On **production**, farmer data is returned in **Step 7** inside `result.data.response_data`. No further API call is required.
 
-- **Production:** data is sent to **Kafka** — the initiating application must subscribe to receive it.
-- **Staging:** data is written to the public S3 **`respone/`** folder (see [`consent_management_postman_registry_a2c.md`](consent_management_postman_registry_a2c.md)).
+On **staging**, farmer data may also appear asynchronously in the public S3 **`respone/`** folder. Use the Postman **Webhook Helpers** (`C. list farmer webhooks` / `D. fetch latest farmer webhook`) or see [`consent_management_postman_registry_a2c.md`](consent_management_postman_registry_a2c.md).
 
-### Sample WebSub / Kafka payload
+### Sample `response_data` structure
 
-A payload similar to the one below is dispatched after approval:
+The `response_data` object (returned inline on production submit consent) has this shape:
 
 ```json
 {

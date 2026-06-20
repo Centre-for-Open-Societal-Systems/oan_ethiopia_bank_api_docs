@@ -20,7 +20,7 @@ These APIs let an A2C partner:
 3. Request and verify a Fayda OTP
 4. Fetch consent reasons and allowed data fields
 5. Submit a consent request (inline PDF) — auto-created and auto-approved
-6. Receive shared farmer data (S3 webhooks on staging, Kafka on production)
+6. Receive shared farmer data — inline in the submit consent response on production (`response_data`); S3 webhooks on staging
 
 ---
 
@@ -54,7 +54,7 @@ The Postman collection defaults to this environment.
 | Verify OTP field | `otp` |
 | Fetch reasons / allowed fields | `GET` |
 | OTP source | Farmer's mobile (Fayda) |
-| Farmer data sink | Kafka (partner must subscribe) |
+| Farmer data sink | Inline in submit consent `response_data` |
 
 ### Environment differences at a glance
 
@@ -67,6 +67,7 @@ The Postman collection defaults to this environment.
 | Reasons endpoint method | `POST` | `GET` |
 | Allowed fields method | `POST` | `GET` |
 | JSON body | includes `method: "call"` (staging) | `jsonrpc` + `params` only |
+| Farmer data delivery | S3 `respone/` folder | Inline `response_data` in submit consent |
 
 ---
 
@@ -78,7 +79,6 @@ sequenceDiagram
     participant Registry as Registry API
     participant Fayda as Fayda OTP
     participant Staging as S3 webhooks (staging)
-    participant Kafka as Kafka (production)
 
     Partner->>Registry: 1. POST /web/session/authenticate
     Registry-->>Partner: session cookie
@@ -96,14 +96,15 @@ sequenceDiagram
     Partner->>Registry: 6. GET or POST /api/consent/reasons
     Partner->>Registry: 7. GET or POST /api/consent/allowed_data_fields
     Partner->>Registry: 8. POST /api/consent/submit_consent
-    Registry-->>Partner: consent_id (approved)
+    Registry-->>Partner: consent_id + response_data (production)
 
     alt Staging
         Fayda-->>Staging: OTP to S3 otp/
         Registry->>Staging: farmer payload to respone/
+        Partner->>Staging: read respone/ webhook
     else Production
         Fayda-->>Partner: OTP to farmer mobile
-        Registry->>Kafka: farmer payload event
+        Note over Partner,Registry: Farmer data in submit_consent response_data
     end
 ```
 
@@ -119,7 +120,7 @@ sequenceDiagram
 | 5 | `4. verify otp` | Uses `transaction_id` + OTP |
 | 6 | `5. Fetch Consent Reasons` | Sets `consent_reason_id` |
 | 7 | `6. Fetch Allowed Data Fields` | Sets `allowed_data_field_ids` |
-| 8 | `7. Submit Consent` | Auto-creates and auto-approves |
+| 8 | `7. Submit Consent` | Auto-approves; returns `response_data` with farmer payload (production) |
 | 9 | `C–D. Farmer webhook helpers` | **Staging only** — read `respone/` payload |
 
 ---
@@ -306,18 +307,70 @@ Submits consent with inline PDF attachment. Auto-creates and auto-approves — n
 }
 ```
 
-**Success `data`:**
+**Success `data` (production):**
+
+On success the response includes consent metadata and the full farmer payload in `response_data`:
 
 ```json
 {
-  "consent_id": 96,
+  "consent_id": 9,
   "status": "approved",
   "auto_approved": true,
   "auto_approval_failed": false,
   "auto_approve_method": "otp",
-  "error_details": null
+  "error_details": null,
+  "response_data": {
+    "source": "g2p_ati_consent_mgt",
+    "event_type": "WEBSUB_INDIVIDUAL_UPDATED",
+    "published_at": "2026-06-20 13:27:07",
+    "consent": {
+      "id": 10,
+      "consent_creation_request_id": "9cd96a35-f9b4-457c-98f9-d49080972380",
+      "consent_type": "specific",
+      "status": "approved",
+      "approved_at": "2026-06-20 13:27:07",
+      "validity_from": "2026-06-20 13:27:07",
+      "validity_to": "2027-06-15 13:27:07",
+      "requested_field_codes": ["NAME", "GENDER", "DOB-GC", "Email", "REGION", "ZONE", "woreda", "KEBELE"],
+      "published_field_codes": ["NAME", "GENDER", "DOB-GC", "Email", "REGION", "ZONE", "woreda", "KEBELE"],
+      "data_field_mode": "dynamic"
+    },
+    "consent_partner": {
+      "id": 264515,
+      "name": "COOP BANK",
+      "ref": false,
+      "websub_config_id": 4,
+      "websub_config_name": "COOP"
+    },
+    "farmer": {
+      "id": 612961,
+      "farmer_id": "FR-9075201458",
+      "name": "TEST TEST TEST"
+    },
+    "selected_data": {
+      "NAME": { "name": "TEST TEST TEST" },
+      "GENDER": { "gender": "male" },
+      "DOB-GC": { "date_of_birth_gc": "1985-06-12" },
+      "REGION": {
+        "region": { "id": 24, "name": "Oromiya", "code": "ET04" }
+      }
+    }
+  }
 }
 ```
+
+| Field | Meaning |
+|-------|---------|
+| `consent_id` | Approved consent record ID |
+| `status` | `approved` when auto-approval succeeds |
+| `response_data` | Full farmer payload — same structure as the staging S3 webhook |
+| `response_data.consent` | Consent metadata and requested/published field codes |
+| `response_data.farmer` | Farmer registry record |
+| `response_data.selected_data` | Published field values keyed by field code |
+
+> **Production:** no separate Kafka subscription or webhook poll is required — read `result.data.response_data` from this response.
+>
+> **Staging:** may return the same shape inline, or farmer data may appear asynchronously in the S3 `respone/` folder.
 
 ---
 
@@ -405,7 +458,8 @@ FARMER_QUERY_ID=1234567 OTP_CODE=123456 TX_ID=abc... \
 | OTP verify field error (staging) | Using `otp` instead of `otp_code` |
 | No OTP in S3 (staging) | Fayda callback delay; pass `OTP_CODE` manually |
 | No file in `respone/` (staging) | Submit failed or WebSub job still queued |
-| No Kafka message (production) | Partner not subscribed to the correct topic |
+| Empty `response_data` (production) | Submit succeeded but no publishable fields for this farmer |
+| Missing `response_data` in submit response | Check `auto_approval_failed` and `error_details` |
 | Farmer search returns empty | Wrong `farmer_query_id` or farmer not registered |
 
 ---

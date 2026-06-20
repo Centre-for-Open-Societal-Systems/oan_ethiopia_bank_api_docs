@@ -398,6 +398,21 @@ if [[ -z "$CONSENT_ID" ]]; then
 fi
 echo "Using consent_id=$CONSENT_ID"
 
+if [[ "$ENV" == "production" ]]; then
+  echo ""
+  echo "========== farmer data (production response_data) =========="
+  echo "$LAST_JSON" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+response_data = ((d.get('result') or {}).get('data') or {}).get('response_data')
+if response_data:
+    print(json.dumps(response_data, indent=2))
+else:
+    print('No response_data in submit consent response.', file=sys.stderr)
+    sys.exit(1)
+" | pretty_json
+fi
+
 # --- Farmer data (staging only) ---
 if [[ "$ENV" == "staging" ]]; then
   echo ""
@@ -410,9 +425,6 @@ if [[ "$ENV" == "staging" ]]; then
   else
     echo "No farmer webhook found yet under respone/. Check ${WEBHOOK_RESPONSE_URL}/"
   fi
-else
-  echo ""
-  echo "Production: farmer data is published to Kafka. Subscribe to your partner topic to receive it."
 fi
 
 echo ""

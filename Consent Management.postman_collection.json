@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "53d1274f-51ad-4973-a87d-a2cd2d4ac55a",
     "name": "Consent Management - Registry A2C Copy",
-    "description": "Consent Management APIs on OpenG2P/Odoo Registry for the A2C loan flow (ATI Farmer production).\n\n**Base URL:** `https://farmer-profile.ati.gov.et` (database: `socialregistrydb`)\n\n> For **staging** testing (`registry.oanstaging.com`, S3 webhooks), override collection variables — see `consent_management_postman_registry_a2c.md`.\n\n**End-to-end flow**\n1. **login** — authenticate and establish session cookie\n2. **search farmer** — look up farmer by registration ID\n3. **request otp** — trigger Fayda OTP for the farmer\n4. **verify otp** — verify Fayda OTP using `transaction_id` + OTP from farmer's mobile\n5. **fetch consent reasons** — retrieve active consent reasons\n6. **fetch allowed data fields** — retrieve allowed fields for the partner\n7. **submit consent** — submit consent request, which automatically creates and auto-approves the consent request\n8. **receive farmer data** — via Kafka subscription (production)\n\n**Staging webhook bucket (override variables to test locally)**\n- OTP callbacks: http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/otp/\n- Farmer data after approval: http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/respone/",
+    "description": "Consent Management APIs on OpenG2P/Odoo Registry for the A2C loan flow (ATI Farmer production).\n\n**Base URL:** `https://farmer-profile.ati.gov.et` (database: `socialregistrydb`)\n\n> For **staging** testing (`registry.oanstaging.com`, S3 webhooks), override collection variables — see `consent_management_postman_registry_a2c.md`.\n\n**End-to-end flow**\n1. **login** — authenticate and establish session cookie\n2. **search farmer** — look up farmer by registration ID\n3. **request otp** — trigger Fayda OTP for the farmer\n4. **verify otp** — verify Fayda OTP using `transaction_id` + OTP from farmer's mobile\n5. **fetch consent reasons** — retrieve active consent reasons\n6. **fetch allowed data fields** — retrieve allowed fields for the partner\n7. **submit consent** — auto-approves and returns farmer data in `result.data.response_data`\n\n**Staging webhook bucket (override variables to test locally)**\n- OTP callbacks: http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/otp/\n- Farmer data after approval: http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/respone/",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "49281480",
     "_collection_link": "https://go.postman.co/collection/49281480-53d1274f-51ad-4973-a87d-a2cd2d4ac55a?source=collection_link"
@@ -390,6 +390,15 @@
                   "        pm.collectionVariables.set(\"consent_id\", cId);",
                   "        pm.environment.set(\"consent_id\", cId);",
                   "        console.log(\"Saved Consent ID:\", cId);",
+                  "    }",
+                  "    const responseData = result.data.response_data;",
+                  "    if (responseData) {",
+                  "        pm.test(\"Submit response includes farmer data\", function () {",
+                  "            pm.expect(responseData).to.have.property('consent');",
+                  "            pm.expect(responseData).to.have.property('farmer');",
+                  "            pm.expect(responseData).to.have.property('selected_data');",
+                  "        });",
+                  "        console.log(\"Farmer data returned in response_data\");",
                   "    }",
                   "}"
                 ],
