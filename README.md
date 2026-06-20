@@ -17,7 +17,7 @@ The same API flow applies in both environments. Differences are mainly registry 
 
 ### Staging (integration testing)
 
-Use staging for end-to-end testing without real Fayda SMS or Kafka subscriptions. OTP callbacks and farmer payloads are written to a public S3 webhook bucket.
+Use staging for end-to-end testing without real Fayda SMS. OTP callbacks and farmer payloads are written to a public S3 webhook bucket.
 
 | Item | Value |
 |------|-------|
@@ -30,7 +30,7 @@ Use staging for end-to-end testing without real Fayda SMS or Kafka subscriptions
 
 ### Production (ATI Farmer)
 
-The Postman collection ships with production defaults. OTP is sent to the farmer's mobile via Fayda; approved data is published to Kafka for the partner application to consume.
+The Postman collection ships with production defaults. OTP is sent to the farmer's mobile via Fayda; approved farmer data is returned inline in the **Submit Consent** response (`result.data.response_data`).
 
 | Item | Value |
 |------|-------|
@@ -38,7 +38,7 @@ The Postman collection ships with production defaults. OTP is sent to the farmer
 | Odoo database | `socialregistrydb` |
 | Credentials | Contact the administrator |
 | OTP delivery | Farmer's mobile (Fayda) |
-| Farmer data delivery | Kafka — partner application must subscribe |
+| Farmer data delivery | Inline in `7. Submit Consent` response (`response_data`) |
 | Recommended tooling | Postman collection (import as-is) |
 
 > **Note:** Use HTTPS for all API calls. HTTP to `registry.oanstaging.com` returns a 301 redirect.
@@ -52,8 +52,8 @@ The Postman collection ships with production defaults. OTP is sent to the farmer
 5. **Verify OTP** — confirm the farmer's identity
 6. **Fetch consent reasons** — retrieve active consent reasons
 7. **Fetch allowed data fields** — retrieve fields the partner may request
-8. **Submit consent** — submit with inline PDF; registry auto-creates and auto-approves
-9. **Receive farmer data** — read from S3 `respone/` (staging) or Kafka (production)
+8. **Submit consent** — submit with inline PDF; registry auto-creates, auto-approves, and returns farmer data in `response_data` (production)
+9. **Receive farmer data** — read from S3 `respone/` (staging only; production data is in step 8 response)
 
 See [`consent_management_postman_registry_a2c.md`](consent_management_postman_registry_a2c.md) for endpoint details and [`consent_management_postman_registry_a2c_workflow.md`](consent_management_postman_registry_a2c_workflow.md) for the production UI workflow.
 
