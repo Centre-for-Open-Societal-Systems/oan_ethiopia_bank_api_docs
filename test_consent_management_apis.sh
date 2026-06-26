@@ -30,7 +30,7 @@ WEBHOOK_S3_API="${WEBHOOK_S3_API:-https://a2c-webhook.s3.ap-south-1.amazonaws.co
 WEBHOOK_RESPONSE_URL="${WEBHOOK_RESPONSE_URL:-${WEBHOOK_URL}/respone}"
 
 PARTNER_ID="${PARTNER_ID:-16}"
-FARMER_QUERY_ID="${FARMER_QUERY_ID:-${FARMER_QUERY:-1234567}}"
+LAND_ID="${LAND_ID:-${FARMER_QUERY_ID:-${FARMER_QUERY:-1234567}}}"
 CONSENT_TYPE="${CONSENT_TYPE:-specific}"
 VALIDITY_MONTHS="${VALIDITY_MONTHS:-12}"
 ALLOWED_DATA_FIELD_IDS="${ALLOWED_DATA_FIELD_IDS:-[1]}"
@@ -183,7 +183,7 @@ if [[ "$ENV" == "production" ]]; then
   SEARCH_BODY="{
     \"jsonrpc\": \"2.0\",
     \"params\": {
-      \"farmer_id\": \"${FARMER_QUERY_ID}\"
+      \"land_id\": \"${LAND_ID}\"
     }
   }"
 else
@@ -191,7 +191,7 @@ else
     \"jsonrpc\": \"2.0\",
     \"method\": \"call\",
     \"params\": {
-      \"query\": \"${FARMER_QUERY_ID}\"
+      \"land_id\": \"${LAND_ID}\"
     }
   }"
 fi
@@ -204,7 +204,7 @@ farmers = (d.get('result') or {}).get('data', {}).get('farmers') or []
 print(farmers[0]['id'] if farmers else '')
 " 2>/dev/null || true)
 if [[ -z "$FARMER_DB_ID" ]]; then
-  echo "Farmer search failed for id=${FARMER_QUERY_ID}." >&2
+  echo "Farmer search failed for land_id=${LAND_ID}." >&2
   exit 1
 fi
 echo "Using farmer_db_id=$FARMER_DB_ID"

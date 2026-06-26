@@ -16,7 +16,7 @@ API reference for the **Consent Management** Postman collection used in the A2C 
 These APIs let an A2C partner:
 
 1. Authenticate to the registry
-2. Search for a farmer by registration ID
+2. Search for a farmer by land ID
 3. Request and verify a Fayda OTP
 4. Fetch consent reasons and allowed data fields
 5. Submit a consent request (inline PDF) — auto-created and auto-approved
@@ -35,7 +35,7 @@ For integration testing with mock webhook delivery via S3.
 | Registry | `https://registry.oanstaging.com` |
 | Database | `odoo` |
 | Credentials | `a2capp@test.com` / `a2capp@test.com` |
-| Search parameter | `query` or `farmer_id` |
+| Search parameter | `land_id` or `query` |
 | Verify OTP field | `otp_code` |
 | Fetch reasons / allowed fields | `POST` |
 | OTP source | [S3 otp/ folder](http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/otp/) |
@@ -50,7 +50,7 @@ The Postman collection defaults to this environment.
 | Registry | `https://farmer-profile.ati.gov.et` |
 | Database | `socialregistrydb` |
 | Credentials | Contact the administrator |
-| Search parameter | `farmer_id` |
+| Search parameter | `land_id` |
 | Verify OTP field | `otp` |
 | Fetch reasons / allowed fields | `GET` |
 | OTP source | Farmer's mobile (Fayda) |
@@ -62,7 +62,7 @@ The Postman collection defaults to this environment.
 |---------|---------|------------|
 | `base_url` | `https://registry.oanstaging.com` | `https://farmer-profile.ati.gov.et` |
 | `db` | `odoo` | `socialregistrydb` |
-| Search body key | `query` (staging script) / `farmer_id` | `farmer_id` |
+| Search body key | `land_id` or `query` (staging script) | `land_id` |
 | Verify OTP key | `otp_code` | `otp` |
 | Reasons endpoint method | `POST` | `GET` |
 | Allowed fields method | `POST` | `GET` |
@@ -182,10 +182,15 @@ Successful responses:
 
 **POST** `/consent/search_farmer`
 
+Resolves approved farmer records by matching the supplied value against registered land parcels (`g2p.land.information.land_id`), among other registry identifiers when using generic search params.
+
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `farmer_id` | Yes (production) | Farmer registration / Fayda UID |
-| `query` | Yes (staging script) | Legacy staging search string |
+| `land_id` | Yes (production) | Land parcel ID used to find the farmer |
+| `query` | Yes (staging script) | Generic search string (also matches `land_id`) |
+| `farmer_id` | No | Alternative search input (matches farmer registration ID) |
+| `national_id` | No | Alternative search input |
+| `uid` | No | Alternative search input (Fayda UID / ID Number) |
 
 Production / collection example:
 
@@ -193,7 +198,7 @@ Production / collection example:
 {
   "jsonrpc": "2.0",
   "params": {
-    "farmer_id": "1234567"
+    "land_id": "1234567"
   }
 }
 ```
@@ -410,7 +415,7 @@ Sample OTP webhook:
 | `base_url` | `https://farmer-profile.ati.gov.et` | Production registry |
 | `db` | `socialregistrydb` | Odoo database |
 | `login` / `password` | `test@user.com` / `pass` | Replace with admin-provided credentials |
-| `farmer_query_id` | `1234567` | Search ID for step 2 |
+| `land_id` | `1234567` | Land parcel ID for step 2 |
 | `farmer_db_id` | `30` | Set automatically by search |
 | `consent_type` | `specific` | Consent type |
 | `consent_reason_id` | `1` | Set by fetch reasons |
@@ -442,7 +447,7 @@ Override these variables when pointing Postman at staging (see [Environments](#e
 
 ```bash
 ENV=production LOGIN=your@user.com PASSWORD=pass \
-FARMER_QUERY_ID=1234567 OTP_CODE=123456 TX_ID=abc... \
+LAND_ID=1234567 OTP_CODE=123456 TX_ID=abc... \
 ./test_consent_management_apis.sh
 ```
 
@@ -460,7 +465,7 @@ FARMER_QUERY_ID=1234567 OTP_CODE=123456 TX_ID=abc... \
 | No file in `respone/` (staging) | Submit failed or WebSub job still queued |
 | Empty `response_data` (production) | Submit succeeded but no publishable fields for this farmer |
 | Missing `response_data` in submit response | Check `auto_approval_failed` and `error_details` |
-| Farmer search returns empty | Wrong `farmer_query_id` or farmer not registered |
+| Farmer search returns empty | Wrong `land_id` or land parcel not linked to an approved farmer |
 
 ---
 

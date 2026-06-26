@@ -46,7 +46,7 @@ The Postman collection ships with production defaults. OTP is sent to the farmer
 ## End-to-end flow
 
 1. **Login** — authenticate and obtain an Odoo session cookie
-2. **Search farmer** — look up farmer by registration ID
+2. **Search farmer** — look up farmer by land ID
 3. **Request OTP** — trigger Fayda OTP delivery
 4. **Obtain OTP** — read from S3 webhook (staging) or farmer's mobile (production)
 5. **Verify OTP** — confirm the farmer's identity
@@ -72,7 +72,7 @@ For **staging** in Postman, override collection variables:
 | `base_url` | `https://registry.oanstaging.com` |
 | `db` | `odoo` |
 | `login` / `password` | `a2capp@test.com` |
-| `farmer_query_id` | Your test farmer ID |
+| `land_id` | Your test land parcel ID |
 
 Then use the **Webhook Helpers** folder to fetch OTP from S3 before verify.
 
@@ -90,7 +90,7 @@ BASE_URL=https://registry.oanstaging.com \
 DB=odoo \
 LOGIN=a2capp@test.com \
 PASSWORD=a2capp@test.com \
-FARMER_QUERY_ID=1234567 \
+LAND_ID=1234567 \
 ./test_consent_management_apis.sh
 ```
 
@@ -100,7 +100,7 @@ FARMER_QUERY_ID=1234567 \
 ENV=production \
 LOGIN=your@user.com \
 PASSWORD=yourpass \
-FARMER_QUERY_ID=1234567 \
+LAND_ID=1234567 \
 OTP_CODE=123456 \
 TX_ID=your-transaction-id \
 ./test_consent_management_apis.sh
