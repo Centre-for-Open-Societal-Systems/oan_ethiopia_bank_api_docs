@@ -134,7 +134,7 @@ Postman automatically handles session cookies if the **Send cookies** option is 
 
 **POST** `/consent/search_farmer`
 
-Query a farmer's record by FAN ID before initiating the consent workflow.
+Query a farmer's record by land ID before initiating the consent workflow.
 
 ### Expected Request Body
 
@@ -142,7 +142,7 @@ Query a farmer's record by FAN ID before initiating the consent workflow.
 {
   "jsonrpc": "2.0",
   "params": {
-    "farmer_id": "{{farmer_query_id}}"
+    "land_id": "{{land_id}}"
   }
 }
 ```
@@ -151,7 +151,7 @@ Query a farmer's record by FAN ID before initiating the consent workflow.
 
 | Variable | Source | Example |
 |----------|--------|---------|
-| `{{farmer_query_id}}` | Entered manually — the farmer's Fayda UID / national ID used as the search query | `123456` |
+| `{{land_id}}` | Entered manually — the farmer's land parcel ID used as the search query | `123456` |
 
 ### Success Response
 
@@ -202,7 +202,7 @@ Query a farmer's record by FAN ID before initiating the consent workflow.
 
 #### User Interface
 
-In the search field (labeled **Search by Farmer ID or National ID...**), enter the target farmer's identifier (e.g., `123456` or `1234567`), click **Search**, and then click **Select** on the matching record.
+In the search field, enter the target farmer's land ID (e.g., `123456` or `1234567`), click **Search**, and then click **Select** on the matching record.
 
 ![Select Farmer from Search Results](pics/ui-select-search.png)
 
