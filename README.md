@@ -72,7 +72,7 @@ For **staging** in Postman, override collection variables:
 | `base_url` | `https://registry.oanstaging.com` |
 | `db` | `odoo` |
 | `login` / `password` | `a2capp@test.com` |
-| `land_id` | Your test land parcel ID |
+| `land_id` | Your test land parcel ID (sent as `query` in step 2) |
 
 Then use the **Webhook Helpers** folder to fetch OTP from S3 before verify.
 

@@ -134,7 +134,7 @@ Postman automatically handles session cookies if the **Send cookies** option is 
 
 **POST** `/consent/search_farmer`
 
-Query a farmer's record by land ID before initiating the consent workflow.
+Query a farmer's record by land ID before initiating the consent workflow. Pass the land ID via `query` (same as the consent portal UI).
 
 ### Expected Request Body
 
@@ -142,16 +142,18 @@ Query a farmer's record by land ID before initiating the consent workflow.
 {
   "jsonrpc": "2.0",
   "params": {
-    "land_id": "{{land_id}}"
+    "query": "{{land_id}}"
   }
 }
 ```
+
+The portal sends the same shape with `method: "call"` and `id: 1`; those fields are optional for API clients.
 
 #### Variables
 
 | Variable | Source | Example |
 |----------|--------|---------|
-| `{{land_id}}` | Entered manually — the farmer's land parcel ID used as the search query | `123456` |
+| `{{land_id}}` | Entered manually — the land parcel ID passed as `query` | `123456` |
 
 ### Success Response
 
