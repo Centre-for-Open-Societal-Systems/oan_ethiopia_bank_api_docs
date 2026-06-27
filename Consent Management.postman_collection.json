@@ -125,7 +125,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"jsonrpc\": \"2.0\",\n    \"params\": {\n        \"land_id\": \"{{land_id}}\"\n    }\n}"
+              "raw": "{\n    \"jsonrpc\": \"2.0\",\n    \"params\": {\n        \"query\": \"{{land_id}}\"\n    }\n}"
             },
             "url": {
               "raw": "{{base_url}}/consent/search_farmer",

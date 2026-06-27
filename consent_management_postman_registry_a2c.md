@@ -35,7 +35,7 @@ For integration testing with mock webhook delivery via S3.
 | Registry | `https://registry.oanstaging.com` |
 | Database | `odoo` |
 | Credentials | `a2capp@test.com` / `a2capp@test.com` |
-| Search parameter | `land_id` or `query` |
+| Search parameter | `query` (land ID value) |
 | Verify OTP field | `otp_code` |
 | Fetch reasons / allowed fields | `POST` |
 | OTP source | [S3 otp/ folder](http://a2c-webhook.s3-website.ap-south-1.amazonaws.com/otp/) |
@@ -50,7 +50,7 @@ The Postman collection defaults to this environment.
 | Registry | `https://farmer-profile.ati.gov.et` |
 | Database | `socialregistrydb` |
 | Credentials | Contact the administrator |
-| Search parameter | `land_id` |
+| Search parameter | `query` (land ID value) |
 | Verify OTP field | `otp` |
 | Fetch reasons / allowed fields | `GET` |
 | OTP source | Farmer's mobile (Fayda) |
@@ -62,7 +62,7 @@ The Postman collection defaults to this environment.
 |---------|---------|------------|
 | `base_url` | `https://registry.oanstaging.com` | `https://farmer-profile.ati.gov.et` |
 | `db` | `odoo` | `socialregistrydb` |
-| Search body key | `land_id` or `query` (staging script) | `land_id` |
+| Search body key | `query` | `query` |
 | Verify OTP key | `otp_code` | `otp` |
 | Reasons endpoint method | `POST` | `GET` |
 | Allowed fields method | `POST` | `GET` |
@@ -182,28 +182,59 @@ Successful responses:
 
 **POST** `/consent/search_farmer`
 
-Resolves approved farmer records by matching the supplied value against registered land parcels (`g2p.land.information.land_id`), among other registry identifiers when using generic search params.
+Search for an approved farmer by **land ID**. Pass the land parcel ID via `query` — this matches the consent portal UI (`callJsonRoute('/consent/search_farmer', { query: singleQuery })`).
+
+The backend matches the supplied value against `g2p.land.information.land_id` (and other registry identifiers).
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `land_id` | Yes (production) | Land parcel ID used to find the farmer |
-| `query` | Yes (staging script) | Generic search string (also matches `land_id`) |
-| `farmer_id` | No | Alternative search input (matches farmer registration ID) |
-| `national_id` | No | Alternative search input |
-| `uid` | No | Alternative search input (Fayda UID / ID Number) |
+| `query` | Yes | Land parcel ID to search (recommended; same as portal) |
+| `farmer_id` | No | Alternative — pass the land ID as the value |
+| `national_id` | No | Alternative — pass the land ID as the value |
+| `uid` | No | Alternative — pass the land ID as the value |
 
-Production / collection example:
+Recommended request (matches portal):
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "call",
+  "params": {
+    "query": "1234567"
+  },
+  "id": 1
+}
+```
+
+Production Postman collection (omits `method` and `id`; `query` is the important field):
 
 ```json
 {
   "jsonrpc": "2.0",
   "params": {
-    "land_id": "1234567"
+    "query": "1234567"
   }
 }
 ```
 
+These alternatives also work (use the land ID as the value):
+
+```json
+{ "params": { "farmer_id": "1234567" } }
+{ "params": { "national_id": "1234567" } }
+{ "params": { "uid": "1234567" } }
+```
+
 Use the returned `farmers[0].id` as `farmer_db_id`.
+
+**Empty `"farmers": []` response**
+
+If the request succeeds but returns no farmers:
+
+- The land ID does not exist in `g2p.land.information`
+- The linked farmer is not in the approved-farmer domain (`_approved_farmer_domain()` filters results)
+- The land record has no `partner_id`
+- Wrong parameter name (e.g. `land_id` in params — not accepted; use `query` instead)
 
 ### Request OTP
 
@@ -415,7 +446,7 @@ Sample OTP webhook:
 | `base_url` | `https://farmer-profile.ati.gov.et` | Production registry |
 | `db` | `socialregistrydb` | Odoo database |
 | `login` / `password` | `test@user.com` / `pass` | Replace with admin-provided credentials |
-| `land_id` | `1234567` | Land parcel ID for step 2 |
+| `land_id` | `1234567` | Land parcel ID — sent as `query` in step 2 |
 | `farmer_db_id` | `30` | Set automatically by search |
 | `consent_type` | `specific` | Consent type |
 | `consent_reason_id` | `1` | Set by fetch reasons |
@@ -465,7 +496,8 @@ LAND_ID=1234567 OTP_CODE=123456 TX_ID=abc... \
 | No file in `respone/` (staging) | Submit failed or WebSub job still queued |
 | Empty `response_data` (production) | Submit succeeded but no publishable fields for this farmer |
 | Missing `response_data` in submit response | Check `auto_approval_failed` and `error_details` |
-| Farmer search returns empty | Wrong `land_id` or land parcel not linked to an approved farmer |
+| Farmer search returns empty | Wrong `query` value, land ID not in registry, land has no `partner_id`, or farmer not in approved domain |
+| Farmer search error: missing parameter | Use `query` (not `land_id`) — backend does not accept `land_id` as a param yet |
 
 ---
 

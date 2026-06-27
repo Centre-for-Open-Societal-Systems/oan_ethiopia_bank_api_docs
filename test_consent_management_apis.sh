@@ -183,7 +183,7 @@ if [[ "$ENV" == "production" ]]; then
   SEARCH_BODY="{
     \"jsonrpc\": \"2.0\",
     \"params\": {
-      \"land_id\": \"${LAND_ID}\"
+      \"query\": \"${LAND_ID}\"
     }
   }"
 else
@@ -191,8 +191,9 @@ else
     \"jsonrpc\": \"2.0\",
     \"method\": \"call\",
     \"params\": {
-      \"land_id\": \"${LAND_ID}\"
-    }
+      \"query\": \"${LAND_ID}\"
+    },
+    \"id\": 1
   }"
 fi
 
@@ -204,7 +205,7 @@ farmers = (d.get('result') or {}).get('data', {}).get('farmers') or []
 print(farmers[0]['id'] if farmers else '')
 " 2>/dev/null || true)
 if [[ -z "$FARMER_DB_ID" ]]; then
-  echo "Farmer search failed for land_id=${LAND_ID}." >&2
+  echo "Farmer search failed for query (land_id)=${LAND_ID}." >&2
   exit 1
 fi
 echo "Using farmer_db_id=$FARMER_DB_ID"
